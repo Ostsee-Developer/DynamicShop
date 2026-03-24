@@ -31,6 +31,11 @@ messages:
   list-categories: "&7Valid categories:"
   cannot-access-special-category: "&cYou cannot access this category directly."
 
+  # Category GUI lore
+  category-lore-items: "&7Items: &a{count}"
+  category-lore-click-to-browse: "&eClick to browse!"
+  category-lore-no-items: "&cNo items available"
+
   # Search messages
   search-no-results: "&cNo items found matching your search."
   search-gui-title: "&8Search Results: &f{count}"

@@ -97,7 +97,7 @@ public class PlayerShopViewGUI {
         // - Lore
         // - Durability
         // - Attributes
-        // - Everything!
+        // - Everything
         ItemStack displayItem = listing.getItem().clone();
         ItemMeta meta = displayItem.getItemMeta();
 

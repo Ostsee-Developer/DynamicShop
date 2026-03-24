@@ -165,6 +165,20 @@ public class MessageManager {
         return getMessageWithPrefix("special-server-item-failed");
     }
 
+    public String categoryLoreItems(int count) {
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("count", String.valueOf(count));
+        return getMessage("category-lore-items", placeholders);
+    }
+
+    public String categoryLoreClickToBrowse() {
+        return getMessage("category-lore-click-to-browse");
+    }
+
+    public String categoryLoreNoItems() {
+        return getMessage("category-lore-no-items");
+    }
+
     public String inventoryFull() {
         return getMessageWithPrefix("inventory-full");
     }

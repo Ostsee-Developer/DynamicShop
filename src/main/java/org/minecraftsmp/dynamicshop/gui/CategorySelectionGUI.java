@@ -9,6 +9,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
 import org.minecraftsmp.dynamicshop.managers.CategoryConfigManager;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import java.util.ArrayList;
@@ -80,11 +81,11 @@ public class CategorySelectionGUI {
             int itemCount = getItemCount(category);
 
             if (itemCount > 0) {
-                lore.add("§7Items: §a" + itemCount);
+                MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().categoryLoreItems(itemCount));
                 lore.add("§7");
-                lore.add("§eClick to browse!");
+                MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().categoryLoreClickToBrowse());
             } else {
-                lore.add("§cNo items available");
+                MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().categoryLoreNoItems());
             }
 
             lore.add("§7───────────────────");

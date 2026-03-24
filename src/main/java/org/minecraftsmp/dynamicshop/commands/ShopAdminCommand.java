@@ -150,7 +150,7 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                 }
 
                 // Open the shop for the target player
-                ShopGUI shopGUI = new ShopGUI(plugin, target, category);
+                ShopGUI shopGUI = new ShopGUI(plugin, target, category, true);
                 plugin.getShopListener().registerShop(target, shopGUI);
                 shopGUI.open();
 

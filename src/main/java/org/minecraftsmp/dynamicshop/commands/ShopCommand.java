@@ -117,7 +117,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        ShopGUI gui = new ShopGUI(plugin, p, cat);
+        ShopGUI gui = new ShopGUI(plugin, p, cat, true);
         plugin.getShopListener().registerShop(p, gui);
         gui.open();
     }

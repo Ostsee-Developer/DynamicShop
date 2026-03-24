@@ -387,6 +387,8 @@ public class ShopListener implements Listener {
         }
 
         if (local == 4) {
+            if (gui.isCommandOpened())
+                return; // Block return to categories when opened via command
             unregisterShop(p);
             CategorySelectionGUI cg = new CategorySelectionGUI(plugin, p);
             cg.open();
@@ -400,6 +402,8 @@ public class ShopListener implements Listener {
         }
 
         if (local == 3) {
+            if (gui.isCommandOpened())
+                return; // Block search when opened via command
             p.closeInventory();
             unregisterShop(p);
 

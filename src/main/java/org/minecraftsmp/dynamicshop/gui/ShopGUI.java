@@ -15,7 +15,6 @@ import org.minecraftsmp.dynamicshop.managers.ProtocolShopManager;
 import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import org.minecraftsmp.dynamicshop.managers.ConfigCacheManager;
 import org.minecraftsmp.dynamicshop.util.ShopItemBuilder;
-
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,10 +36,16 @@ public class ShopGUI {
     private int page = 0;
     private int maxPage = 0;
     private boolean hideOutOfStock = false;
+    private final boolean commandOpened;
 
     public ShopGUI(DynamicShop plugin, Player player, ItemCategory category) {
+        this(plugin, player, category, false);
+    }
+
+    public ShopGUI(DynamicShop plugin, Player player, ItemCategory category, boolean commandOpened) {
         this.plugin = plugin;
         this.player = player;
+        this.commandOpened = commandOpened;
         this.category = category;
 
         this.size = plugin.getConfig().getInt("gui.shop_menu_size", 54);
@@ -352,19 +357,31 @@ public class ShopGUI {
                 page < maxPage ? "§7Click to go forward" : "§cNo next page");
         pm.sendSlot(inventory, navRow + 8, nextPage);
 
-        // X - Back to Categories (Red X)
-        ItemStack backToCategories = ShopItemBuilder.navItem(
-                "§c§lBack to Categories",
-                Material.BARRIER,
-                "§7Return to category selection");
-        pm.sendSlot(inventory, navRow + 4, backToCategories);
+        // X - Back to Categories (Red X) — hidden when opened via command
+        if (commandOpened) {
+            ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+            ItemMeta fillerMeta = filler.getItemMeta();
+            if (fillerMeta != null) {
+                fillerMeta.displayName(LegacyComponentSerializer.legacySection().deserialize(" "));
+                filler.setItemMeta(fillerMeta);
+            }
+            pm.sendSlot(inventory, navRow + 4, filler);
+        } else {
+            ItemStack backToCategories = ShopItemBuilder.navItem(
+                    "§c§lBack to Categories",
+                    Material.BARRIER,
+                    "§7Return to category selection");
+            pm.sendSlot(inventory, navRow + 4, backToCategories);
+        }
 
-        // Compass - Search (Anvil GUI)
-        ItemStack search = ShopItemBuilder.navItem(
-                "§b§lSearch Items",
-                Material.COMPASS,
-                "§7Open search menu");
-        pm.sendSlot(inventory, navRow + 3, search);
+        // Compass - Search (Anvil GUI) — hidden when opened via command
+        if (!commandOpened) {
+            ItemStack search = ShopItemBuilder.navItem(
+                    "§b§lSearch Items",
+                    Material.COMPASS,
+                    "§7Open search menu");
+            pm.sendSlot(inventory, navRow + 3, search);
+        }
 
         // Page Info
         int totalItems = (category == ItemCategory.PERMISSIONS || category == ItemCategory.SERVER_SHOP)
@@ -409,6 +426,10 @@ public class ShopGUI {
 
     public ItemCategory getCategory() {
         return category;
+    }
+
+    public boolean isCommandOpened() {
+        return commandOpened;
     }
 
     public int getSize() {
