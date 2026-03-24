@@ -144,6 +144,14 @@ messages:
   # Stock restriction message
   shop-stock-limited: "&cStock is limited! You only bought &e{stock} &citems."
 
+  # Bedrock/Item Action GUI
+  item-action-title: "&8Buy / Sell"
+  item-action-buy-1: "&a&lBuy ×1"
+  item-action-buy-64: "&a&lBuy ×64"
+  item-action-sell-1: "&c&lSell ×1"
+  item-action-sell-64: "&c&lSell ×64"
+  item-action-back: "&7&l← Back"
+
 # ================================================================
 # Translation Guide
 # ================================================================

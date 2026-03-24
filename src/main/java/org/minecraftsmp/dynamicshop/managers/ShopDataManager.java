@@ -25,7 +25,8 @@ public class ShopDataManager {
             Integer minStockStorage, // Hard limit
             boolean disableBuy,
             boolean disableSell,
-            ItemCategory categoryOverride) {
+            ItemCategory categoryOverride,
+            Double stockRate) { // Per-item rate override (null = use global)
     }
 
     static final Map<Material, ShopItemConfig> itemConfigs = new ConcurrentHashMap<>();
@@ -132,6 +133,7 @@ public class ShopDataManager {
             Integer minStorage = data.contains("min-stock-storage") ? data.getInt("min-stock-storage") : null;
             boolean disableBuy = data.getBoolean("disable-buy", false);
             boolean disableSell = data.getBoolean("disable-sell", false);
+            Double stockRate = data.contains("rate") ? data.getDouble("rate") : null;
 
             // Load category override
             ItemCategory overrideCat = null;
@@ -145,7 +147,7 @@ public class ShopDataManager {
             }
 
             ShopItemConfig config = new ShopItemConfig(base, maxStock, minStock, maxStorage, minStorage, disableBuy,
-                    disableSell, overrideCat);
+                    disableSell, overrideCat, stockRate);
             itemConfigs.put(mat, config);
 
             loaded++;
@@ -299,8 +301,8 @@ public class ShopDataManager {
 
         double k = ConfigCacheManager.curveStrength;
 
-        // Negative stock multiplier per item
-        double negPercent = ConfigCacheManager.negativeStockPercentPerItem / 100.0;
+        // Negative stock multiplier per item (per-item override > global)
+        double negPercent = (cfg.stockRate != null ? cfg.stockRate : ConfigCacheManager.negativeStockPercentPerItem) / 100.0;
         double q = 1.0 + negPercent;
 
         // Shortage inflation multiplier
@@ -407,8 +409,8 @@ public class ShopDataManager {
         double minStock = cfg.minStock != null ? cfg.minStock : 0.0;
         double k = ConfigCacheManager.curveStrength;
 
-        // Negative-stock multiplier
-        double negPercent = ConfigCacheManager.negativeStockPercentPerItem / 100.0;
+        // Negative-stock multiplier (per-item override > global)
+        double negPercent = (cfg.stockRate != null ? cfg.stockRate : ConfigCacheManager.negativeStockPercentPerItem) / 100.0;
         double q = 1.0 + negPercent;
 
         // Shortage inflation
@@ -1276,16 +1278,73 @@ public class ShopDataManager {
         ShopItemConfig newConfig;
         if (old == null) {
             // Should usually not happen if we are enabling/adding, but safe default
-            newConfig = new ShopItemConfig(price, null, null, null, null, false, false, null);
+            newConfig = new ShopItemConfig(price, null, null, null, null, false, false, null, null);
         } else {
             newConfig = new ShopItemConfig(price, old.maxStock, old.minStock, old.maxStockStorage, old.minStockStorage,
-                    old.disableBuy, old.disableSell, old.categoryOverride);
+                    old.disableBuy, old.disableSell, old.categoryOverride, old.stockRate);
         }
         itemConfigs.put(mat, newConfig);
 
         // Save to config
         plugin.getConfig().set("items." + mat.name() + ".base", price);
         plugin.saveConfig();
+    }
+
+    /**
+     * Enable or disable buying for an item
+     */
+    public static void setBuyDisabled(Material mat, boolean disabled) {
+        ShopItemConfig old = itemConfigs.get(mat);
+        if (old == null) return;
+        ShopItemConfig newConfig = new ShopItemConfig(old.basePrice, old.maxStock, old.minStock,
+                old.maxStockStorage, old.minStockStorage, disabled, old.disableSell, old.categoryOverride, old.stockRate);
+        itemConfigs.put(mat, newConfig);
+
+        plugin.getConfig().set("items." + mat.name() + ".disable-buy", disabled);
+        plugin.saveConfig();
+    }
+
+    /**
+     * Enable or disable selling for an item
+     */
+    public static void setSellDisabled(Material mat, boolean disabled) {
+        ShopItemConfig old = itemConfigs.get(mat);
+        if (old == null) return;
+        ShopItemConfig newConfig = new ShopItemConfig(old.basePrice, old.maxStock, old.minStock,
+                old.maxStockStorage, old.minStockStorage, old.disableBuy, disabled, old.categoryOverride, old.stockRate);
+        itemConfigs.put(mat, newConfig);
+
+        plugin.getConfig().set("items." + mat.name() + ".disable-sell", disabled);
+        plugin.saveConfig();
+    }
+
+    /**
+     * Set the stock rate for an item (per-item override)
+     */
+    public static void setStockRate(Material mat, Double rate) {
+        ShopItemConfig old = itemConfigs.get(mat);
+        if (old == null) return;
+        ShopItemConfig newConfig = new ShopItemConfig(old.basePrice, old.maxStock, old.minStock,
+                old.maxStockStorage, old.minStockStorage, old.disableBuy, old.disableSell, old.categoryOverride, rate);
+        itemConfigs.put(mat, newConfig);
+
+        if (rate != null) {
+            plugin.getConfig().set("items." + mat.name() + ".rate", rate);
+        } else {
+            plugin.getConfig().set("items." + mat.name() + ".rate", null);
+        }
+        plugin.saveConfig();
+    }
+
+    /**
+     * Get the effective stock rate for an item (per-item or global fallback)
+     */
+    public static double getStockRate(Material mat) {
+        ShopItemConfig cfg = itemConfigs.get(mat);
+        if (cfg != null && cfg.stockRate != null) {
+            return cfg.stockRate;
+        }
+        return ConfigCacheManager.negativeStockPercentPerItem;
     }
 
     /**

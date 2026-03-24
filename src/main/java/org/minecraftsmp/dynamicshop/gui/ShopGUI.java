@@ -257,70 +257,89 @@ public class ShopGUI {
 
             List<String> lore = new ArrayList<>();
 
-            // Buy price
-            java.util.Map<String, String> buyPlaceholders = new java.util.HashMap<>();
-            buyPlaceholders.put("price", plugin.getEconomyManager().format(price));
-            MessageManager.addLoreIfNotEmpty(lore,
-                    plugin.getMessageManager().getMessage("shop-lore-buy-price", buyPlaceholders));
+            boolean buyDisabled = ShopDataManager.isBuyDisabled(mat);
+            boolean sellDisabled = ShopDataManager.isSellDisabled(mat);
 
-            // Sell price
-            java.util.Map<String, String> sellPlaceholders = new java.util.HashMap<>();
-            sellPlaceholders.put("price", plugin.getEconomyManager().format(sellPrice));
-            MessageManager.addLoreIfNotEmpty(lore,
-                    plugin.getMessageManager().getMessage("shop-lore-sell-price", sellPlaceholders));
+            // Buy price (hide if buy disabled)
+            if (!buyDisabled) {
+                java.util.Map<String, String> buyPlaceholders = new java.util.HashMap<>();
+                buyPlaceholders.put("price", plugin.getEconomyManager().format(price));
+                MessageManager.addLoreIfNotEmpty(lore,
+                        plugin.getMessageManager().getMessage("shop-lore-buy-price", buyPlaceholders));
+            }
 
-            // Stock info
-            if (stock < 0) {
-                java.util.Map<String, String> stockPlaceholders = new java.util.HashMap<>();
-                stockPlaceholders.put("stock", String.format("%.0f", stock));
+            // Sell price (hide if sell disabled)
+            if (!sellDisabled) {
+                java.util.Map<String, String> sellPlaceholders = new java.util.HashMap<>();
+                sellPlaceholders.put("price", plugin.getEconomyManager().format(sellPrice));
                 MessageManager.addLoreIfNotEmpty(lore,
-                        plugin.getMessageManager().getMessage("lore-stock-negative", stockPlaceholders));
+                        plugin.getMessageManager().getMessage("shop-lore-sell-price", sellPlaceholders));
+            }
 
-                // Show price increase for negative stock too
-                double hours = ShopDataManager.getHoursInShortage(mat);
-                double hourlyRate = ConfigCacheManager.hourlyIncreasePercent / 100.0;
-                double multiplier = Math.pow(1.0 + hourlyRate, hours);
-                double percentIncrease = (multiplier - 1.0) * 100.0;
-
-                java.util.Map<String, String> percentPlaceholders = new java.util.HashMap<>();
-                percentPlaceholders.put("percent", String.format("%,.0f", percentIncrease));
-                MessageManager.addLoreIfNotEmpty(lore,
-                        plugin.getMessageManager().getMessage("shop-lore-price-increase", percentPlaceholders));
-                MessageManager.addLoreIfNotEmpty(lore,
-                        plugin.getMessageManager().getMessage("shop-lore-price-increase-note"));
-            } else if (stock == 0) {
-                MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("lore-out-of-stock"));
-
-                // Show price increase for zero stock
-                double hours = ShopDataManager.getHoursInShortage(mat);
-                double hourlyRate = ConfigCacheManager.hourlyIncreasePercent / 100.0;
-                double multiplier = Math.pow(1.0 + hourlyRate, hours);
-                double percentIncrease = (multiplier - 1.0) * 100.0;
-
-                java.util.Map<String, String> percentPlaceholders = new java.util.HashMap<>();
-                percentPlaceholders.put("percent", String.format("%,.0f", percentIncrease));
-                MessageManager.addLoreIfNotEmpty(lore,
-                        plugin.getMessageManager().getMessage("shop-lore-price-increase", percentPlaceholders));
-                MessageManager.addLoreIfNotEmpty(lore,
-                        plugin.getMessageManager().getMessage("shop-lore-price-increase-note"));
-            } else {
-                java.util.Map<String, String> stockPlaceholders = new java.util.HashMap<>();
-                stockPlaceholders.put("stock", String.format("%.0f", stock));
-                MessageManager.addLoreIfNotEmpty(lore,
-                        plugin.getMessageManager().getMessage("lore-stock", stockPlaceholders));
-                if (stock < 10) {
+            // Stock info (hide if buy disabled)
+            if (!buyDisabled) {
+                if (stock < 0) {
+                    java.util.Map<String, String> stockPlaceholders = new java.util.HashMap<>();
+                    stockPlaceholders.put("stock", String.format("%.0f", stock));
                     MessageManager.addLoreIfNotEmpty(lore,
-                            plugin.getMessageManager().getMessage("shop-lore-low-stock"));
+                            plugin.getMessageManager().getMessage("lore-stock-negative", stockPlaceholders));
+
+                    // Show price increase for negative stock too
+                    double hours = ShopDataManager.getHoursInShortage(mat);
+                    double hourlyRate = ConfigCacheManager.hourlyIncreasePercent / 100.0;
+                    double multiplier = Math.pow(1.0 + hourlyRate, hours);
+                    double percentIncrease = (multiplier - 1.0) * 100.0;
+                    double maxPercent = (ConfigCacheManager.maxPriceMultiplier - 1.0) * 100.0;
+                    boolean capped = percentIncrease >= maxPercent;
+                    if (capped) percentIncrease = maxPercent;
+
+                    java.util.Map<String, String> percentPlaceholders = new java.util.HashMap<>();
+                    percentPlaceholders.put("percent", String.format("%,.0f", percentIncrease) + (capped ? " (MAX)" : ""));
+                    MessageManager.addLoreIfNotEmpty(lore,
+                            plugin.getMessageManager().getMessage("shop-lore-price-increase", percentPlaceholders));
+                    MessageManager.addLoreIfNotEmpty(lore,
+                            plugin.getMessageManager().getMessage("shop-lore-price-increase-note"));
+                } else if (stock == 0) {
+                    MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("lore-out-of-stock"));
+
+                    // Show price increase for zero stock
+                    double hours = ShopDataManager.getHoursInShortage(mat);
+                    double hourlyRate = ConfigCacheManager.hourlyIncreasePercent / 100.0;
+                    double multiplier = Math.pow(1.0 + hourlyRate, hours);
+                    double percentIncrease = (multiplier - 1.0) * 100.0;
+                    double maxPercent = (ConfigCacheManager.maxPriceMultiplier - 1.0) * 100.0;
+                    boolean capped = percentIncrease >= maxPercent;
+                    if (capped) percentIncrease = maxPercent;
+
+                    java.util.Map<String, String> percentPlaceholders = new java.util.HashMap<>();
+                    percentPlaceholders.put("percent", String.format("%,.0f", percentIncrease) + (capped ? " (MAX)" : ""));
+                    MessageManager.addLoreIfNotEmpty(lore,
+                            plugin.getMessageManager().getMessage("shop-lore-price-increase", percentPlaceholders));
+                    MessageManager.addLoreIfNotEmpty(lore,
+                            plugin.getMessageManager().getMessage("shop-lore-price-increase-note"));
+                } else {
+                    java.util.Map<String, String> stockPlaceholders = new java.util.HashMap<>();
+                    stockPlaceholders.put("stock", String.format("%.0f", stock));
+                    MessageManager.addLoreIfNotEmpty(lore,
+                            plugin.getMessageManager().getMessage("lore-stock", stockPlaceholders));
+                    if (stock < 10) {
+                        MessageManager.addLoreIfNotEmpty(lore,
+                                plugin.getMessageManager().getMessage("shop-lore-low-stock"));
+                    }
                 }
             }
 
             lore.add("");
-            MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("shop-lore-left-click-buy"));
-            MessageManager.addLoreIfNotEmpty(lore,
-                    plugin.getMessageManager().getMessage("shop-lore-shift-left-click-buy"));
-            MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("shop-lore-right-click-sell"));
-            MessageManager.addLoreIfNotEmpty(lore,
-                    plugin.getMessageManager().getMessage("shop-lore-shift-right-click-sell"));
+            if (!buyDisabled) {
+                MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("shop-lore-left-click-buy"));
+                MessageManager.addLoreIfNotEmpty(lore,
+                        plugin.getMessageManager().getMessage("shop-lore-shift-left-click-buy"));
+            }
+            if (!sellDisabled) {
+                MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("shop-lore-right-click-sell"));
+                MessageManager.addLoreIfNotEmpty(lore,
+                        plugin.getMessageManager().getMessage("shop-lore-shift-right-click-sell"));
+            }
 
             meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
             item.setItemMeta(meta);

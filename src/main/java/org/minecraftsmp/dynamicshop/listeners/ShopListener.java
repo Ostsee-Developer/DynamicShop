@@ -23,8 +23,10 @@ import org.minecraftsmp.dynamicshop.gui.AdminItemEditGUI;
 import org.minecraftsmp.dynamicshop.gui.AdminShopBrowseGUI;
 import org.minecraftsmp.dynamicshop.gui.AdminSpecialItemEditGUI;
 import org.minecraftsmp.dynamicshop.gui.CategorySelectionGUI;
+import org.minecraftsmp.dynamicshop.gui.ItemActionGUI;
 import org.minecraftsmp.dynamicshop.gui.SearchResultsGUI;
 import org.minecraftsmp.dynamicshop.gui.ShopGUI;
+import org.minecraftsmp.dynamicshop.util.BedrockUtil;
 import org.minecraftsmp.dynamicshop.managers.ConfigCacheManager;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
 import org.minecraftsmp.dynamicshop.transactions.Transaction;
@@ -44,6 +46,7 @@ public class ShopListener implements Listener {
     private final Map<Player, AdminSpecialItemEditGUI> openAdminSpecialEdit = new HashMap<>();
     private final Map<Player, AdminCategoryGUI> openAdminCategory = new HashMap<>();
     private final Map<Player, AdminCategoryEditGUI> openAdminCategoryEdit = new HashMap<>();
+    private final Map<Player, ItemActionGUI> openItemAction = new HashMap<>();
     private final Map<UUID, Long> lastTransaction = new HashMap<>();
 
     public ShopListener(DynamicShop plugin) {
@@ -84,6 +87,7 @@ public class ShopListener implements Listener {
         openAdminSpecialEdit.remove(p);
         openAdminCategory.remove(p);
         openAdminCategoryEdit.remove(p);
+        openItemAction.remove(p);
         lastTransaction.remove(p.getUniqueId());
     }
 
@@ -137,6 +141,14 @@ public class ShopListener implements Listener {
         openAdminCategoryEdit.remove(p);
     }
 
+    public void registerItemAction(Player p, ItemActionGUI gui) {
+        openItemAction.put(p, gui);
+    }
+
+    public void unregisterItemAction(Player p) {
+        openItemAction.remove(p);
+    }
+
     // ------------------------------------------------------------------
     // CLICK LISTENER
     // ------------------------------------------------------------------
@@ -146,6 +158,15 @@ public class ShopListener implements Listener {
             return;
         if (e.getClickedInventory() == null)
             return;
+
+        // -------------------------
+        // ITEM ACTION GUI (Bedrock)
+        // -------------------------
+        if (openItemAction.containsKey(p)) {
+            e.setCancelled(true);
+            openItemAction.get(p).handleClick(p, e.getRawSlot());
+            return;
+        }
 
         // -------------------------
         // ADMIN CATEGORY EDIT GUI
@@ -340,6 +361,15 @@ public class ShopListener implements Listener {
         Material mat = gui.getItemFromSlot(slot);
         if (mat == null)
             return;
+
+        // Bedrock players: open ItemActionGUI instead of direct buy/sell
+        if (BedrockUtil.isBedrock(p)) {
+            p.closeInventory();
+            ItemActionGUI actionGUI = new ItemActionGUI(plugin, p, mat, gui);
+            registerItemAction(p, actionGUI);
+            actionGUI.open();
+            return;
+        }
 
         int amount = shift ? 64 : 1;
 
@@ -791,7 +821,7 @@ public class ShopListener implements Listener {
         if (!openShop.containsKey(p) && !openCategory.containsKey(p) && !openSearch.containsKey(p)
                 && !openAdminBrowse.containsKey(p) && !openAdminEdit.containsKey(p) && !openAdminConfig.containsKey(p)
                 && !openAdminSpecialEdit.containsKey(p) && !openAdminCategory.containsKey(p)
-                && !openAdminCategoryEdit.containsKey(p))
+                && !openAdminCategoryEdit.containsKey(p) && !openItemAction.containsKey(p))
             return;
         e.setCancelled(true);
     }
@@ -816,6 +846,10 @@ public class ShopListener implements Listener {
         }
         if (openAdminBrowse.containsKey(p) && openAdminBrowse.get(p).getInventory().equals(e.getInventory())) {
             openAdminBrowse.remove(p);
+            return;
+        }
+        if (openItemAction.containsKey(p) && openItemAction.get(p).getInventory().equals(e.getInventory())) {
+            openItemAction.remove(p);
             return;
         }
         if (openShop.containsKey(p) && openShop.get(p).getInventory().equals(e.getInventory())) {

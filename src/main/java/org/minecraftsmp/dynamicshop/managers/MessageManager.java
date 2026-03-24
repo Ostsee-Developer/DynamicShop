@@ -42,12 +42,29 @@ public class MessageManager {
 
         messagesConfig = YamlConfiguration.loadConfiguration(messagesFile);
 
-        // Load defaults from jar
+        // Load defaults from jar and merge missing keys
         InputStream defaultStream = plugin.getResource("messages.yml");
         if (defaultStream != null) {
             YamlConfiguration defaultConfig = YamlConfiguration.loadConfiguration(
                     new InputStreamReader(defaultStream));
             messagesConfig.setDefaults(defaultConfig);
+
+            // Auto-add any missing keys to the user's file
+            boolean changed = false;
+            for (String key : defaultConfig.getKeys(true)) {
+                if (!messagesConfig.isSet(key)) {
+                    messagesConfig.set(key, defaultConfig.get(key));
+                    changed = true;
+                }
+            }
+            if (changed) {
+                try {
+                    messagesConfig.save(messagesFile);
+                    plugin.getLogger().info("[Messages] Added missing message keys to messages.yml");
+                } catch (java.io.IOException e) {
+                    plugin.getLogger().warning("[Messages] Could not save updated messages.yml: " + e.getMessage());
+                }
+            }
         }
 
         // Load prefix

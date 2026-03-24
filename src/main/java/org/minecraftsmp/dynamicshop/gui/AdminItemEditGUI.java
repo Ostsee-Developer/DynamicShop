@@ -39,10 +39,12 @@ public class AdminItemEditGUI {
     private static final int STOCK_PLUS_10 = 15;
     private static final int STOCK_PLUS_64 = 16;
 
-    private static final int PRICE_EDIT_SLOT = 20; // Row 3
-    private static final int PRICE_INCREASE_SLOT = 21; // Row 3 - price increase %
-    private static final int CATEGORY_EDIT_SLOT = 22; // Row 3
+    private static final int PRICE_EDIT_SLOT = 19; // Row 3
+    private static final int PRICE_INCREASE_SLOT = 20; // Row 3 - price increase %
+    private static final int CATEGORY_EDIT_SLOT = 21; // Row 3
+    private static final int BUY_TOGGLE_SLOT = 23; // Row 3 - toggle buy
     private static final int TOGGLE_ENABLED_SLOT = 24; // Row 3
+    private static final int SELL_TOGGLE_SLOT = 25; // Row 3 - toggle sell
 
     private static final int BACK_BUTTON_SLOT = 40; // Bottom center
 
@@ -86,7 +88,9 @@ public class AdminItemEditGUI {
         inventory.setItem(PRICE_EDIT_SLOT, createPriceButton());
         inventory.setItem(PRICE_INCREASE_SLOT, createPriceIncreaseButton());
         inventory.setItem(CATEGORY_EDIT_SLOT, createCategoryButton());
+        inventory.setItem(BUY_TOGGLE_SLOT, createBuyToggleButton());
         inventory.setItem(TOGGLE_ENABLED_SLOT, createToggleButton());
+        inventory.setItem(SELL_TOGGLE_SLOT, createSellToggleButton());
 
         // Back button
         inventory.setItem(BACK_BUTTON_SLOT, createBackButton());
@@ -230,6 +234,62 @@ public class AdminItemEditGUI {
         return item;
     }
 
+    private ItemStack createBuyToggleButton() {
+        boolean buyDisabled = ShopDataManager.isBuyDisabled(material);
+
+        Material mat = buyDisabled ? Material.RED_STAINED_GLASS_PANE : Material.LIME_STAINED_GLASS_PANE;
+        ItemStack item = new ItemStack(mat);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(
+                    LegacyComponentSerializer.legacySection().deserialize(
+                            buyDisabled ? "§c§lBUY DISABLED" : "§a§lBUY ENABLED"));
+
+            List<String> lore = new ArrayList<>();
+            if (buyDisabled) {
+                lore.add("§7Players §ccannot buy§7 this item");
+                lore.add("");
+                lore.add("§aClick to ENABLE buying");
+            } else {
+                lore.add("§7Players §acan buy§7 this item");
+                lore.add("");
+                lore.add("§cClick to DISABLE buying");
+            }
+
+            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack createSellToggleButton() {
+        boolean sellDisabled = ShopDataManager.isSellDisabled(material);
+
+        Material mat = sellDisabled ? Material.RED_STAINED_GLASS_PANE : Material.LIME_STAINED_GLASS_PANE;
+        ItemStack item = new ItemStack(mat);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(
+                    LegacyComponentSerializer.legacySection().deserialize(
+                            sellDisabled ? "§c§lSELL DISABLED" : "§a§lSELL ENABLED"));
+
+            List<String> lore = new ArrayList<>();
+            if (sellDisabled) {
+                lore.add("§7Players §ccannot sell§7 this item");
+                lore.add("");
+                lore.add("§aClick to ENABLE selling");
+            } else {
+                lore.add("§7Players §acan sell§7 this item");
+                lore.add("");
+                lore.add("§cClick to DISABLE selling");
+            }
+
+            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
     private ItemStack createBackButton() {
         ItemStack item = new ItemStack(Material.ARROW);
         ItemMeta meta = item.getItemMeta();
@@ -270,7 +330,9 @@ public class AdminItemEditGUI {
             case PRICE_EDIT_SLOT -> openPriceEditor();
             case PRICE_INCREASE_SLOT -> openPriceIncreaseEditor();
             case CATEGORY_EDIT_SLOT -> cycleCategory();
+            case BUY_TOGGLE_SLOT -> toggleBuy();
             case TOGGLE_ENABLED_SLOT -> toggleEnabled();
+            case SELL_TOGGLE_SLOT -> toggleSell();
             case BACK_BUTTON_SLOT -> goBack();
         }
     }
@@ -362,6 +424,30 @@ public class AdminItemEditGUI {
             player.sendMessage("§a✓ §7Item §aenabled§7 in the shop");
         } else {
             player.sendMessage("§a✓ §7Item §cdisabled§7 from the shop");
+        }
+        render();
+    }
+
+    private void toggleBuy() {
+        boolean currentlyDisabled = ShopDataManager.isBuyDisabled(material);
+        ShopDataManager.setBuyDisabled(material, !currentlyDisabled);
+
+        if (currentlyDisabled) {
+            player.sendMessage("§a✓ §7Buying §aenabled§7 for this item");
+        } else {
+            player.sendMessage("§a✓ §7Buying §cdisabled§7 for this item");
+        }
+        render();
+    }
+
+    private void toggleSell() {
+        boolean currentlyDisabled = ShopDataManager.isSellDisabled(material);
+        ShopDataManager.setSellDisabled(material, !currentlyDisabled);
+
+        if (currentlyDisabled) {
+            player.sendMessage("§a✓ §7Selling §aenabled§7 for this item");
+        } else {
+            player.sendMessage("§a✓ §7Selling §cdisabled§7 for this item");
         }
         render();
     }

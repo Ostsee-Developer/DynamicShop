@@ -12,11 +12,14 @@ import org.bukkit.inventory.ItemStack;
 
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
+import org.minecraftsmp.dynamicshop.managers.ConfigCacheManager;
 import org.minecraftsmp.dynamicshop.gui.AdminCategoryGUI;
+import org.minecraftsmp.dynamicshop.gui.ItemActionGUI;
 import org.minecraftsmp.dynamicshop.gui.ShopGUI;
 import org.minecraftsmp.dynamicshop.managers.CategoryConfigManager;
 import org.minecraftsmp.dynamicshop.managers.ItemsAdderWrapper;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
+import org.minecraftsmp.dynamicshop.util.BedrockUtil;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,6 +81,130 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             case "resetshortage" -> {
                 ShopDataManager.resetAllShortageData();
                 sender.sendMessage("§a[DynamicShop] §fAll shortage data has been reset.");
+                return true;
+            }
+
+            // --------------------------------------------------------------
+            // /shopadmin setinflation <percent>
+            // --------------------------------------------------------------
+            case "setinflation" -> {
+                if (args.length < 2) {
+                    sender.sendMessage("§cUsage: /shopadmin setinflation <percent>");
+                    sender.sendMessage("§7Current: §e" + ConfigCacheManager.hourlyIncreasePercent + "% §7per hour");
+                    return true;
+                }
+
+                double percent;
+                try {
+                    percent = Double.parseDouble(args[1]);
+                } catch (NumberFormatException e) {
+                    sender.sendMessage("§cInvalid number: " + args[1]);
+                    return true;
+                }
+
+                if (percent < 0 || percent > 100) {
+                    sender.sendMessage("§cPercent must be between 0 and 100.");
+                    return true;
+                }
+
+                // Update config and cache
+                plugin.getConfig().set("dynamic-pricing.hourly-increase-percent", percent);
+                plugin.saveConfig();
+                ConfigCacheManager.hourlyIncreasePercent = percent;
+
+                sender.sendMessage("§a[DynamicShop] §fHourly price inflation set to §e" + percent + "% §fper hour.");
+                return true;
+            }
+
+            // --------------------------------------------------------------
+            // /shopadmin setrate <item> <percent>
+            // --------------------------------------------------------------
+            case "setrate" -> {
+                if (args.length < 3) {
+                    sender.sendMessage("§cUsage: /shopadmin setrate <item> <percent>");
+                    sender.sendMessage("§7Sets the price change rate for a specific item.");
+                    sender.sendMessage("§7Global default: §e" + ConfigCacheManager.negativeStockPercentPerItem + "%");
+                    return true;
+                }
+
+                Material mat = Material.matchMaterial(args[1]);
+                if (mat == null) {
+                    sender.sendMessage("§cUnknown item: " + args[1]);
+                    return true;
+                }
+
+                double percent;
+                try {
+                    percent = Double.parseDouble(args[2]);
+                } catch (NumberFormatException e) {
+                    sender.sendMessage("§cInvalid number: " + args[2]);
+                    return true;
+                }
+
+                if (percent < 0 || percent > 100) {
+                    sender.sendMessage("§cPercent must be between 0 and 100.");
+                    return true;
+                }
+
+                ShopDataManager.setStockRate(mat, percent);
+
+                sender.sendMessage("§a[DynamicShop] §fRate for §e" + mat.name() + " §fset to §e" + percent + "%§f.");
+                return true;
+            }
+
+            // --------------------------------------------------------------
+            // /shopadmin changerate <item> <+/-percent>
+            // --------------------------------------------------------------
+            case "changerate" -> {
+                if (args.length < 3) {
+                    sender.sendMessage("§cUsage: /shopadmin changerate <item> <amount>");
+                    sender.sendMessage("§7Adds or subtracts from the item's current rate.");
+                    return true;
+                }
+
+                Material mat = Material.matchMaterial(args[1]);
+                if (mat == null) {
+                    sender.sendMessage("§cUnknown item: " + args[1]);
+                    return true;
+                }
+
+                double delta;
+                try {
+                    delta = Double.parseDouble(args[2]);
+                } catch (NumberFormatException e) {
+                    sender.sendMessage("§cInvalid number: " + args[2]);
+                    return true;
+                }
+
+                double currentRate = ShopDataManager.getStockRate(mat);
+                double newRate = Math.max(0, Math.min(100, currentRate + delta));
+
+                ShopDataManager.setStockRate(mat, newRate);
+
+                String sign = delta >= 0 ? "+" : "";
+                sender.sendMessage("§a[DynamicShop] §fRate for §e" + mat.name() + " §f" + sign + delta
+                        + "% → §e" + String.format("%.1f", newRate) + "%§f.");
+                return true;
+            }
+
+            // --------------------------------------------------------------
+            // /shopadmin testbedrock
+            // --------------------------------------------------------------
+            case "testbedrock" -> {
+                if (!(sender instanceof Player p)) {
+                    sender.sendMessage("§cOnly players can use this command.");
+                    return true;
+                }
+
+                boolean wasForced = BedrockUtil.isForcedBedrock(p);
+                BedrockUtil.setForceBedrock(p, !wasForced);
+
+                if (!wasForced) {
+                    sender.sendMessage("§a[DynamicShop] §fBedrock mode §aENABLED§f. Opening shop...");
+                    p.performCommand("shop");
+                } else {
+                    sender.sendMessage("§a[DynamicShop] §fBedrock mode §cDISABLED§f.");
+                }
                 return true;
             }
 
@@ -516,6 +643,9 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(plugin.getMessageManager().getMessage("admin-help-add-server-shop"));
         sender.sendMessage("§7/shopadmin remove perm <slot>");
         sender.sendMessage("§7/shopadmin open <player> <category>");
+        sender.sendMessage("§7/shopadmin setinflation <percent>");
+        sender.sendMessage("§7/shopadmin setrate <item> <percent>");
+        sender.sendMessage("§7/shopadmin changerate <item> <+/-amount>");
     }
 
     private void sendAddHelp(CommandSender sender) {
@@ -556,6 +686,10 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             out.add("add");
             out.add("remove");
             out.add("resetshortage");
+            out.add("setinflation");
+            out.add("setrate");
+            out.add("changerate");
+            out.add("testbedrock");
             out.add("categories");
             out.add("open");
             return out;
@@ -580,6 +714,27 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 2 && args[0].equalsIgnoreCase("remove")) {
             out.add("perm");
+            return out;
+        }
+
+        // Tab complete item names for setrate/changerate
+        if (args.length == 2 && (args[0].equalsIgnoreCase("setrate") || args[0].equalsIgnoreCase("changerate"))) {
+            String partial = args[1].toUpperCase();
+            for (Material m : Material.values()) {
+                if (ShopDataManager.getBasePrice(m) >= 0 && m.name().startsWith(partial)) {
+                    out.add(m.name());
+                }
+            }
+            return out;
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("setrate")) {
+            out.add("<percent>");
+            return out;
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("changerate")) {
+            out.add("<+/-amount>");
             return out;
         }
 
