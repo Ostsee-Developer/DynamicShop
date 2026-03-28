@@ -605,10 +605,16 @@ public class ShopListener implements Listener {
         double totalPayout = ShopDataManager.getTotalSellValue(mat, removed);
 
         int actuallyRemoved = 0;
-        for (ItemStack item : p.getInventory().getContents()) {
+        for (int i = 0; i < p.getInventory().getSize(); i++) {
+            ItemStack item = p.getInventory().getItem(i);
             if (item != null && item.getType() == mat && actuallyRemoved < removed && !isDamaged(item)) {
                 int take = Math.min(item.getAmount(), removed - actuallyRemoved);
-                item.setAmount(item.getAmount() - take);
+                int newAmt = item.getAmount() - take;
+                if (newAmt <= 0) {
+                    p.getInventory().setItem(i, null);
+                } else {
+                    item.setAmount(newAmt);
+                }
                 actuallyRemoved += take;
             }
         }

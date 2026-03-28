@@ -275,13 +275,13 @@ public class ShopDataManager {
     /**
      * Core dynamic pricing formula.
      *
-     * Takes a base price and adjusts it based on current stock.
-     * - Low stock => price goes up toward maxMultiplier
-     * - High stock => price goes down toward minMultiplier
+     * Uses definite integrals for O(1) computation.
+     * Clamping is baked INTO the integral (not applied after), so
+     * bulk pricing is mathematically identical to 1-at-a-time.
      */
     // ============================================================================
-    // TOTAL BUY COST (continuous pricing)
-    // ∫ P(s) ds from s = s0 - amount → s0
+    // TOTAL BUY COST (continuous pricing with clamped integration)
+    // ∫ clamp(P(s), MIN, MAX) ds from s = s0 - amount → s0
     // ============================================================================
     public static double getTotalBuyCost(Material mat, double amount) {
         ShopItemConfig cfg = itemConfigs.get(mat);
@@ -295,101 +295,24 @@ public class ShopDataManager {
         }
 
         double s0 = getStock(mat);
-        // Resolution: Item Config > Global Config
         double L = cfg.maxStock != null ? cfg.maxStock : ConfigCacheManager.maxStock;
         double minStock = cfg.minStock != null ? cfg.minStock : 0.0;
-
         double k = ConfigCacheManager.curveStrength;
-
-        // Negative stock multiplier per item (per-item override > global)
         double negPercent = (cfg.stockRate != null ? cfg.stockRate : ConfigCacheManager.negativeStockPercentPerItem) / 100.0;
         double q = 1.0 + negPercent;
-
-        // Shortage inflation multiplier
         double hourlyIncrease = ConfigCacheManager.hourlyIncreasePercent / 100.0;
         double h = getHoursInShortage(mat);
         double t = Math.pow(1.0 + hourlyIncrease, h);
 
-        double a = s0 - amount; // lower bound
-        double b = s0; // upper bound
+        double a = s0 - amount;
+        double b = s0;
 
-        double total = 0.0;
-
-        // NEGATIVE REGION (-∞ → minStock] (Standard behavior assumes minStock=0)
-        // If minStock is modified, "Negative Region" effectively means "Below Min
-        // Stock"
-        // But the original math assumes pivot at 0.
-        // To support shifted pivot, we would need to shift s.
-        // For now, adhering to the issue description implicitly, we treat minStock as
-        // the 0-point for the curve?
-        // Actually, the issue description just says "min-stock".
-        // Use case: "I want price to stop dropping at 100 stock".
-
-        // Let's assume standard curve behavior [0, L].
-        // If s < 0, use negative logic.
-        // If 0 < s < L, use mid logic.
-        // If s > L, use high logic.
-
-        // If overrides are present:
-        // "min-stock": If this means "Price behaves as if stock is 0 when stock is
-        // min-stock", that's a shift.
-        // Or does it mean "The 0-point of the curve is now at min-stock"?
-        // Given complexity, let's assume it shifts the curve's valid range [min, max].
-        // For simplicity and preventing breaking changes, let's map [minStock,
-        // maxStock] to [0, L] logic?
-        // No, that's too complex.
-        // Let's treat minStock as the lower bound of the "Mid Region".
-        // I.e. Mid Region is [minStock, maxStock].
-        // Below minStock is Negative Region logic.
-
-        // Re-evaluating: The original code uses 0 and L.
-        // New code uses minStock and maxStock (which defaults to L).
-
-        double lowerBound = minStock;
-        double upperBound = L;
-
-        // NEGATIVE REGION (-∞ → lowerBound]
-        double negA = Math.min(a, lowerBound);
-        double negB = Math.min(b, lowerBound);
-
-        // Shift inputs so the integral thinks it's working with (-∞ -> 0]
-        // effA = negA - lowerBound
-        // effB = negB - lowerBound
-        if (negA < negB) {
-            total += integrateNegativeRegion(B, q, t, negA - lowerBound, negB - lowerBound);
-        }
-
-        // MID REGION [lowerBound → upperBound]
-        // Shift inputs so integral thinks it's working with [0 -> L]
-        // effective L_for_calc = upperBound - lowerBound
-        double effectiveMax = upperBound - lowerBound;
-        // Avoid div by zero
-        if (effectiveMax <= 0)
-            effectiveMax = 1.0;
-
-        double midA = Math.max(a, lowerBound);
-        double midB = Math.min(b, upperBound);
-
-        if (midA < midB) {
-            total += integrateMidPositiveRegion(B, k, effectiveMax, midA - lowerBound, midB - lowerBound) * t;
-        }
-
-        // HIGH REGION [upperBound → +∞)
-        double highA = Math.max(a, upperBound);
-        double highB = Math.max(b, upperBound);
-        if (highA < highB) {
-            total += integrateHighPositiveRegion(B, k, highA, highB) * t;
-        }
-
-        // Clamp to min/max price multiplier limits
-        double maxTotal = B * amount * ConfigCacheManager.maxPriceMultiplier;
-        double minTotal = B * amount * ConfigCacheManager.minPriceMultiplier;
-        return Math.max(minTotal, Math.min(total, maxTotal));
+        return computeClampedIntegral(B, a, b, L, minStock, k, q, t);
     }
 
     // ============================================================================
-    // TOTAL SELL VALUE (continuous pricing)
-    // ∫ P(s) ds from s = s0 → s0 + amount then apply tax
+    // TOTAL SELL VALUE (continuous pricing with clamped integration + tax)
+    // ∫ clamp(P(s), MIN, MAX) ds from s = s0 → s0 + amount, then apply tax
     // ============================================================================
     public static double getTotalSellValue(Material mat, int amount) {
         ShopItemConfig cfg = itemConfigs.get(mat);
@@ -397,43 +320,51 @@ public class ShopDataManager {
             return -1.0;
 
         double B = cfg.basePrice;
+        double tax = ConfigCacheManager.sellTaxPercent;
 
-        // Dynamic pricing disabled
         if (!ConfigCacheManager.dynamicPricingEnabled) {
-            return B * amount * (1.0 - ConfigCacheManager.sellTaxPercent);
+            return B * amount * (1.0 - tax);
         }
 
         double s0 = getStock(mat);
-        // Resolution: Item Config > Global Config
         double L = cfg.maxStock != null ? cfg.maxStock : ConfigCacheManager.maxStock;
         double minStock = cfg.minStock != null ? cfg.minStock : 0.0;
         double k = ConfigCacheManager.curveStrength;
-
-        // Negative-stock multiplier (per-item override > global)
         double negPercent = (cfg.stockRate != null ? cfg.stockRate : ConfigCacheManager.negativeStockPercentPerItem) / 100.0;
         double q = 1.0 + negPercent;
-
-        // Shortage inflation
         double hourlyIncrease = ConfigCacheManager.hourlyIncreasePercent / 100.0;
         double h = getHoursInShortage(mat);
         double t = Math.pow(1.0 + hourlyIncrease, h);
 
-        double a = s0; // lower bound
-        double b = s0 + amount; // upper bound
+        double a = s0;
+        double b = s0 + amount;
 
+        double total = computeClampedIntegral(B, a, b, L, minStock, k, q, t);
+
+        return Math.max(0.0, total * (1.0 - tax));
+    }
+
+    // ============================================================================
+    // CLAMPED INTEGRAL: ∫ clamp(P(s), minPrice, maxPrice) ds
+    // Clamping is built into each region's integral so bulk = 1-at-a-time.
+    // ============================================================================
+    private static double computeClampedIntegral(double B, double a, double b,
+            double L, double minStock, double k, double q, double t) {
         double total = 0.0;
-
         double lowerBound = minStock;
         double upperBound = L;
+        double maxPrice = B * ConfigCacheManager.maxPriceMultiplier;
+        double minPrice = B * ConfigCacheManager.minPriceMultiplier;
 
-        // NEGATIVE REGION
+        // NEGATIVE REGION (-∞ → lowerBound]
         double negA = Math.min(a, lowerBound);
         double negB = Math.min(b, lowerBound);
         if (negA < negB) {
-            total += integrateNegativeRegion(B, q, t, negA - lowerBound, negB - lowerBound);
+            total += integrateNegativeRegionClamped(B, q, t, negA - lowerBound, negB - lowerBound, maxPrice);
         }
 
-        // MID REGION
+        // MID REGION [lowerBound → upperBound]
+        // P(s') = B*t*(1 - 0.5*k*s'/L), linear decreasing from B*t to B*t*(1-0.5k)
         double effectiveMax = upperBound - lowerBound;
         if (effectiveMax <= 0)
             effectiveMax = 1.0;
@@ -441,48 +372,105 @@ public class ShopDataManager {
         double midA = Math.max(a, lowerBound);
         double midB = Math.min(b, upperBound);
         if (midA < midB) {
-            total += integrateMidPositiveRegion(B, k, effectiveMax, midA - lowerBound, midB - lowerBound) * t;
+            total += integrateMidRegionClamped(B, k, t, effectiveMax,
+                    midA - lowerBound, midB - lowerBound, maxPrice, minPrice);
         }
 
-        // HIGH REGION
+        // HIGH REGION [upperBound → +∞) — flat price, clamp directly
         double highA = Math.max(a, upperBound);
         double highB = Math.max(b, upperBound);
         if (highA < highB) {
-            total += integrateHighPositiveRegion(B, k, highA, highB) * t;
+            double highPrice = Math.max(minPrice, Math.min(B * t * (1.0 - k), maxPrice));
+            total += highPrice * (highB - highA);
         }
 
-        // Clamp to min/max price multiplier limits (before tax)
-        double maxTotal = B * amount * ConfigCacheManager.maxPriceMultiplier;
-        double minTotal = B * amount * ConfigCacheManager.minPriceMultiplier;
-        double clamped = Math.max(minTotal, Math.min(total, maxTotal));
-
-        // FINAL SELL TAX
-        double tax = ConfigCacheManager.sellTaxPercent;
-
-        return Math.max(0.0, clamped * (1.0 - tax));
+        return total;
     }
 
     // ============================================================================
     // REGION INTEGRALS
     // ============================================================================
 
-    // NEGATIVE REGION: price = B * t * q^(-s)
-    private static double integrateNegativeRegion(double B, double q, double t, double a, double b) {
-        // ∫ B*t * q^(-s) ds = B*t * ( q^(-a) - q^(-b) ) / ln(q)
-        return B * t * (Math.pow(q, -a) - Math.pow(q, -b)) / Math.log(q);
+    /**
+     * Negative region: integrates min(B*t*q^(-s), maxPrice) from a to b.
+     * Finds the threshold where exponential price exceeds maxPrice and splits
+     * the integral into a flat-clamped portion + normal exponential portion.
+     * This makes bulk identical to 1-at-a-time (no post-hoc clamping needed).
+     */
+    private static double integrateNegativeRegionClamped(double B, double q, double t, double a, double b, double maxPrice) {
+        // Price function: P(s) = B * t * q^(-s), increasing as s decreases
+        // Find threshold s_thresh where P(s) = maxPrice:
+        //   B * t * q^(-s) = maxPrice  =>  s = -ln(maxPrice/(B*t)) / ln(q)
+        double sThresh;
+        if (B * t >= maxPrice) {
+            sThresh = 0.0; // entire negative region exceeds max
+        } else {
+            sThresh = -Math.log(maxPrice / (B * t)) / Math.log(q);
+        }
+
+        double total = 0.0;
+
+        // Clamped portion: [a, min(b, sThresh)] at flat maxPrice
+        double clampEnd = Math.min(b, sThresh);
+        if (a < clampEnd) {
+            total += maxPrice * (clampEnd - a);
+        }
+
+        // Normal (unclamped) portion: [max(a, sThresh), b]
+        double normalStart = Math.max(a, sThresh);
+        if (normalStart < b) {
+            total += B * t * (Math.pow(q, -normalStart) - Math.pow(q, -b)) / Math.log(q);
+        }
+
+        return total;
     }
 
-    // MID REGION: price = B * (1 - 0.5*k*(s/L))
-    private static double integrateMidPositiveRegion(double B, double k, double L, double a, double b) {
-        // ∫ B(1 - 0.5k s/L) ds = B[(b-a) - 0.5k(b² - a²)/(2L)]
-        double term1 = (b - a);
-        double term2 = 0.5 * k * (b * b - a * a) / (2 * L);
-        return B * (term1 - term2);
-    }
+    /**
+     * Mid region: integrates clamp(B*t*(1 - 0.5*k*s'/L), minPrice, maxPrice) from a to b.
+     * Price is linear decreasing: highest at s'=0 (P=B*t), lowest at s'=L (P=B*t*(1-0.5k)).
+     * Finds thresholds where price crosses max/min clamps and splits accordingly.
+     */
+    private static double integrateMidRegionClamped(double B, double k, double t, double L,
+            double a, double b, double maxPrice, double minPrice) {
+        // P(s') = B*t*(1 - 0.5*k*s'/L)
+        // P decreases as s' increases
+        // MAX threshold: P(s') = maxPrice => s' = 2*L*(1 - maxPrice/(B*t)) / k
+        // MIN threshold: P(s') = minPrice => s' = 2*L*(1 - minPrice/(B*t)) / k
 
-    // HIGH REGION: price = B * (1 - k) (flat)
-    private static double integrateHighPositiveRegion(double B, double k, double a, double b) {
-        return B * (1.0 - k) * (b - a);
+        double total = 0.0;
+
+        // Find where price crosses maxPrice (above this, clamp to max)
+        double sMax = (t > 0 && B * t > maxPrice) ? 2.0 * L * (1.0 - maxPrice / (B * t)) / k : -1.0;
+        // Find where price crosses minPrice (below this, clamp to min)
+        double sMin = (t > 0 && B * t * (1.0 - 0.5 * k) < minPrice) ? 2.0 * L * (1.0 - minPrice / (B * t)) / k : L + 1.0;
+
+        // Clamp thresholds to valid range
+        sMax = Math.max(sMax, 0);
+        sMin = Math.min(sMin, L);
+
+        // Region splits: [a, b] may cross sMax and/or sMin
+        // Above max: [a, min(b, sMax)] — flat at maxPrice
+        double maxClampEnd = Math.min(b, sMax);
+        if (a < maxClampEnd) {
+            total += maxPrice * (maxClampEnd - a);
+        }
+
+        // Normal region: [max(a, sMax), min(b, sMin)]
+        double normalA = Math.max(a, sMax);
+        double normalB = Math.min(b, sMin);
+        if (normalA < normalB) {
+            double term1 = (normalB - normalA);
+            double term2 = 0.5 * k * (normalB * normalB - normalA * normalA) / (2.0 * L);
+            total += B * (term1 - term2) * t;
+        }
+
+        // Below min: [max(a, sMin), b] — flat at minPrice
+        double minClampStart = Math.max(a, sMin);
+        if (minClampStart < b) {
+            total += minPrice * (b - minClampStart);
+        }
+
+        return total;
     }
 
     // ------------------------------------------------------------------------
@@ -812,28 +800,7 @@ public class ShopDataManager {
         // Capture shortage before update
         accumulateShortage(mat);
 
-        // Feature: Selling reduces inflation by 10% per transaction
-        if (delta > 0 && getStock(mat) <= 0) {
-            double currentHours = shortageHoursMap.getOrDefault(mat, 0.0);
-            if (currentHours > 0) {
-                double hourlyRate = ConfigCacheManager.hourlyIncreasePercent / 100.0;
-                if (hourlyRate > 0) {
-                    double multiplier = Math.pow(1.0 + hourlyRate, currentHours);
-                    double currentIncrease = multiplier - 1.0;
-
-                    // Deduct 10% of the increase
-                    double newIncrease = currentIncrease * 0.90;
-                    double newMultiplier = 1.0 + newIncrease;
-
-                    // Back-calculate hours: hours = log_base_(1+r) (newMultiplier)
-                    // log_b(x) = ln(x) / ln(b)
-                    double newHours = Math.log(newMultiplier) / Math.log(1.0 + hourlyRate);
-
-                    shortageHoursMap.put(mat, Math.max(0, newHours));
-                    markDirty(mat);
-                }
-            }
-        }
+        // Note: Inflation is only reset when stock goes positive (below)
 
         double oldStock = getStock(mat);
         double newStock = oldStock + delta;
@@ -851,10 +818,9 @@ public class ShopDataManager {
 
         stockMap.put(mat, newStock);
 
-        // If coming back in stock, reset shortage
-        if (newStock > 0) {
-            shortageHoursMap.put(mat, 0.0);
-        }
+        // Note: shortage hours are NOT reset when stock goes positive.
+        // They only accumulate while stock <= 0 (via accumulateShortage).
+        // Admins can manually reset via /shopadmin commands if needed.
 
         // Even if we stay negative, we reset lastUpdate because we "baked" the previous
         // time
