@@ -35,6 +35,7 @@ public class DynamicShop extends JavaPlugin {
     private EmbeddedP2PManager p2pCrossServerManager;
     private org.minecraftsmp.dynamicshop.listeners.ChatInputListener chatInputListener;
     private org.minecraftsmp.dynamicshop.managers.InputManager inputManager;
+    private RestockManager restockManager;
 
     private static DynamicShop instance;
 
@@ -82,6 +83,18 @@ public class DynamicShop extends JavaPlugin {
         this.p2pCrossServerManager.init();
         ShopDataManager.init(this);
 
+        // Initialize restock scheduler
+        restockManager = new RestockManager(this);
+        restockManager.init();
+
+        // Auto-populate restock config section for existing servers
+        if (!getConfig().isSet("restock")) {
+            getConfig().set("restock.enabled", false);
+            getConfig().set("restock.rules", new java.util.ArrayList<>());
+            saveConfig();
+            getLogger().info("[Restock] Added default restock config section (disabled).");
+        }
+
         // Initialize player shops
         this.playerShopManager = new PlayerShopManager(this);
         getLogger().info("Player shops enabled!");
@@ -111,6 +124,11 @@ public class DynamicShop extends JavaPlugin {
         // Initialize input manager (auto-detects Dialog API availability)
         this.inputManager = new org.minecraftsmp.dynamicshop.managers.InputManager(this);
 
+        // Update checker — async GitHub release check + OP join notifications
+        UpdateChecker updateChecker = new UpdateChecker(this);
+        getServer().getPluginManager().registerEvents(updateChecker, this);
+        updateChecker.check();
+
         // --------------------------------------------------------------------
         // COMMANDS
         // --------------------------------------------------------------------
@@ -130,6 +148,11 @@ public class DynamicShop extends JavaPlugin {
         // Cancel timer to prevent memory leak
         if (ShopDataManager.saveTimer != null) {
             ShopDataManager.saveTimer.cancel();
+        }
+
+        // Cancel restock timers
+        if (restockManager != null) {
+            restockManager.shutdown();
         }
 
         // Flush queue before shutdown to save all pending updates
@@ -178,6 +201,9 @@ public class DynamicShop extends JavaPlugin {
         economyManager.reload();
         specialShopManager.reload();
         CategoryConfigManager.load();
+        if (restockManager != null) {
+            restockManager.reload();
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -229,6 +255,10 @@ public class DynamicShop extends JavaPlugin {
 
     public EmbeddedP2PManager getP2PCrossServerManager() {
         return p2pCrossServerManager;
+    }
+
+    public RestockManager getRestockManager() {
+        return restockManager;
     }
 
     public static DynamicShop getInstance() {

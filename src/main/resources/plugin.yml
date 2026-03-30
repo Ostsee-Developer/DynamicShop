@@ -1,6 +1,6 @@
 # plugin.yml
 name: DynamicShop
-version: 2.4.2
+version: 2.4.3
 main: org.minecraftsmp.dynamicshop.DynamicShop
 api-version: 1.20
 author: selfservice0
@@ -13,12 +13,12 @@ softdepend: [PlaceholderAPI, ItemsAdder, floodgate]
 commands:
   shop:
     description: Open the dynamic shop GUI
-    usage: /shop [sell <price>]
+    usage: /shop [<category>|sell <price>|sellhand|sellall]
     aliases: [ dshop, market ]
     permission: dynamicshop.use
   shopadmin:
     description: Admin commands for managing the shop
-    usage: /shopadmin <reload|save|reset|setstock|info|resetshortage>
+    usage: /shopadmin <reload|setstock|setrate|changerate|resetshortage|setinflation>
     aliases: [dsa, shopadm]
     permission: dynamicshop.admin
 
@@ -38,3 +38,9 @@ permissions:
   dynamicshop.playershop.sell:
     description: Allows listing items in player shops
     default: true
+  dynamicshop.use.sellhand:
+    description: Allows selling held items via /shop sellhand
+    default: false
+  dynamicshop.use.sellall:
+    description: Allows selling all items via /shop sellall
+    default: false

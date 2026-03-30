@@ -9,13 +9,14 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
 import org.minecraftsmp.dynamicshop.managers.CategoryConfigManager;
+import org.minecraftsmp.dynamicshop.managers.RestockManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import java.util.List;
 
 /**
  * GUI for editing a single category's properties.
- * Allows changing the icon and display name.
+ * Allows changing the icon, display name, and restock settings.
  * 
  * Uses InputManager for Paper 1.21+ compatibility (Dialogs) or Chat Fallback.
  */
@@ -27,13 +28,20 @@ public class AdminCategoryEditGUI {
     private final ItemCategory category;
     private final AdminCategoryGUI parentGUI;
 
-    private static final int SIZE = 27;
+    private static final int SIZE = 36;
 
-    // Slots
+    // Slots — Row 2  (icon / name / reset)
     private static final int ICON_SLOT = 11;
     private static final int NAME_SLOT = 13;
     private static final int RESET_SLOT = 15;
-    private static final int BACK_SLOT = 22;
+
+    // Slots — Row 3 (restock controls)
+    private static final int RESTOCK_TOGGLE_SLOT = 20;
+    private static final int RESTOCK_STOCK_SLOT = 22;
+    private static final int RESTOCK_INTERVAL_SLOT = 24;
+
+    // Slots — Row 4
+    private static final int BACK_SLOT = 31;
 
     public AdminCategoryEditGUI(DynamicShop plugin, Player player, ItemCategory category, AdminCategoryGUI parentGUI) {
         this.plugin = plugin;
@@ -59,7 +67,7 @@ public class AdminCategoryEditGUI {
             inventory.setItem(i, filler);
         }
 
-        // Icon editor
+        // ── Icon editor ─────────────────────────────────────────────
         ItemStack iconItem = new ItemStack(category.getIcon());
         ItemMeta meta = iconItem.getItemMeta();
         if (meta != null) {
@@ -73,7 +81,7 @@ public class AdminCategoryEditGUI {
         }
         inventory.setItem(ICON_SLOT, iconItem);
 
-        // Name Button
+        // ── Name Button ─────────────────────────────────────────────
         ItemStack nameItem = new ItemStack(Material.NAME_TAG);
         meta = nameItem.getItemMeta();
         if (meta != null) {
@@ -86,7 +94,7 @@ public class AdminCategoryEditGUI {
         }
         inventory.setItem(NAME_SLOT, nameItem);
 
-        // Reset Button
+        // ── Reset Button ────────────────────────────────────────────
         ItemStack resetItem = new ItemStack(Material.TNT);
         meta = resetItem.getItemMeta();
         if (meta != null) {
@@ -98,7 +106,52 @@ public class AdminCategoryEditGUI {
         }
         inventory.setItem(RESET_SLOT, resetItem);
 
-        // Back Button
+        // ── Restock Controls ────────────────────────────────────────
+        RestockManager restock = plugin.getRestockManager();
+        int[] rule = restock != null ? restock.getRuleForCategory(category) : null;
+        boolean hasRule = rule != null;
+
+        // Toggle button
+        ItemStack toggleItem = new ItemStack(hasRule ? Material.LIME_DYE : Material.GRAY_DYE);
+        meta = toggleItem.getItemMeta();
+        if (meta != null) {
+            meta.displayName(LegacyComponentSerializer.legacySection()
+                    .deserialize(hasRule ? "§a§lRestock: ON" : "§7§lRestock: OFF"));
+            meta.lore(List.of(
+                    text(hasRule ? "§aThis category auto-restocks." : "§7No restock rule for this category."),
+                    text(""),
+                    text(hasRule ? "§eClick to §cdisable§e restock" : "§eClick to §aenable§e restock")));
+            toggleItem.setItemMeta(meta);
+        }
+        inventory.setItem(RESTOCK_TOGGLE_SLOT, toggleItem);
+
+        // Stock amount button
+        ItemStack stockItem = new ItemStack(Material.CHEST);
+        meta = stockItem.getItemMeta();
+        if (meta != null) {
+            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§6§lTarget Stock"));
+            meta.lore(List.of(
+                    text("§7Current: §f" + (hasRule ? rule[0] : "N/A")),
+                    text(""),
+                    text("§eClick to set target stock level")));
+            stockItem.setItemMeta(meta);
+        }
+        inventory.setItem(RESTOCK_STOCK_SLOT, stockItem);
+
+        // Interval button
+        ItemStack intervalItem = new ItemStack(Material.CLOCK);
+        meta = intervalItem.getItemMeta();
+        if (meta != null) {
+            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§d§lRestock Interval"));
+            meta.lore(List.of(
+                    text("§7Current: §f" + (hasRule ? rule[1] + " min" : "N/A")),
+                    text(""),
+                    text("§eClick to set interval (minutes)")));
+            intervalItem.setItemMeta(meta);
+        }
+        inventory.setItem(RESTOCK_INTERVAL_SLOT, intervalItem);
+
+        // ── Back Button ─────────────────────────────────────────────
         ItemStack backItem = new ItemStack(Material.ARROW);
         meta = backItem.getItemMeta();
         if (meta != null) {
@@ -126,6 +179,9 @@ public class AdminCategoryEditGUI {
             case ICON_SLOT -> handleIconClick(isRightClick);
             case NAME_SLOT -> handleNameClick();
             case RESET_SLOT -> handleReset();
+            case RESTOCK_TOGGLE_SLOT -> handleRestockToggle();
+            case RESTOCK_STOCK_SLOT -> handleRestockStock();
+            case RESTOCK_INTERVAL_SLOT -> handleRestockInterval();
             case BACK_SLOT -> goBack();
         }
     }
@@ -194,6 +250,109 @@ public class AdminCategoryEditGUI {
         CategoryConfigManager.removeDisplayName(category);
         player.sendMessage("§a[DynamicShop] §fCategory reset to defaults");
         render();
+    }
+
+    // ─── RESTOCK HANDLERS ───────────────────────────────────────────
+
+    private void handleRestockToggle() {
+        RestockManager restock = plugin.getRestockManager();
+        if (restock == null) return;
+
+        int[] rule = restock.getRuleForCategory(category);
+        if (rule != null) {
+            // Remove the rule
+            restock.removeRuleForCategory(category);
+            player.sendMessage("§a[DynamicShop] §fRestock disabled for §e" + CategoryConfigManager.getDisplayName(category));
+        } else {
+            // Add a default rule and ensure restock is globally enabled
+            if (!restock.isRestockEnabled()) {
+                restock.setRestockEnabled(true);
+            }
+            restock.setRuleForCategory(category, 200, 30);
+            player.sendMessage("§a[DynamicShop] §fRestock enabled for §e" + CategoryConfigManager.getDisplayName(category)
+                    + " §f(200 stock, every 30 min)");
+        }
+        render();
+    }
+
+    private void handleRestockStock() {
+        RestockManager restock = plugin.getRestockManager();
+        if (restock == null) return;
+
+        int[] rule = restock.getRuleForCategory(category);
+        if (rule == null) {
+            player.sendMessage("§c[DynamicShop] §fEnable restock first!");
+            return;
+        }
+
+        plugin.getShopListener().unregisterAdminCategoryEdit(player);
+
+        plugin.getInputManager().requestText(player,
+                "Enter Target Stock Amount",
+                String.valueOf(rule[0]),
+                input -> {
+                    if (input != null && !input.trim().isEmpty()) {
+                        try {
+                            int stock = Integer.parseInt(input.trim());
+                            if (stock > 0) {
+                                int[] current = plugin.getRestockManager().getRuleForCategory(category);
+                                int interval = current != null ? current[1] : 30;
+                                plugin.getRestockManager().setRuleForCategory(category, stock, interval);
+                                player.sendMessage("§a[DynamicShop] §fRestock target set to §e" + stock);
+                            } else {
+                                player.sendMessage("§c[DynamicShop] §fStock must be positive!");
+                            }
+                        } catch (NumberFormatException e) {
+                            player.sendMessage("§c[DynamicShop] §fInvalid number: " + input);
+                        }
+                    }
+
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        AdminCategoryEditGUI newGUI = new AdminCategoryEditGUI(plugin, player, category, parentGUI);
+                        plugin.getShopListener().registerAdminCategoryEdit(player, newGUI);
+                        newGUI.open();
+                    });
+                });
+    }
+
+    private void handleRestockInterval() {
+        RestockManager restock = plugin.getRestockManager();
+        if (restock == null) return;
+
+        int[] rule = restock.getRuleForCategory(category);
+        if (rule == null) {
+            player.sendMessage("§c[DynamicShop] §fEnable restock first!");
+            return;
+        }
+
+        plugin.getShopListener().unregisterAdminCategoryEdit(player);
+
+        plugin.getInputManager().requestText(player,
+                "Enter Restock Interval (minutes)",
+                String.valueOf(rule[1]),
+                input -> {
+                    if (input != null && !input.trim().isEmpty()) {
+                        try {
+                            int minutes = Integer.parseInt(input.trim());
+                            if (minutes > 0) {
+                                int[] current = plugin.getRestockManager().getRuleForCategory(category);
+                                int stock = current != null ? current[0] : 200;
+                                plugin.getRestockManager().setRuleForCategory(category, stock, minutes);
+                                player.sendMessage("§a[DynamicShop] §fRestock interval set to §e" + minutes + " min");
+                            } else {
+                                player.sendMessage("§c[DynamicShop] §fInterval must be positive!");
+                            }
+                        } catch (NumberFormatException e) {
+                            player.sendMessage("§c[DynamicShop] §fInvalid number: " + input);
+                        }
+                    }
+
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        AdminCategoryEditGUI newGUI = new AdminCategoryEditGUI(plugin, player, category, parentGUI);
+                        plugin.getShopListener().registerAdminCategoryEdit(player, newGUI);
+                        newGUI.open();
+                    });
+                });
     }
 
     private void goBack() {

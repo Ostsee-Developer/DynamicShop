@@ -1117,6 +1117,21 @@ items:
   SLIME_SPAWN_EGG:           { base: -1 }
 
 # ================================================================
+# AUTOMATIC CATEGORY RESTOCK
+# ================================================================
+# Periodically resets stock for all items in a category to a target level.
+# Useful for ensuring essential items always remain available.
+restock:
+  enabled: false
+  rules: []
+  # Example rule format:
+  #  - category: FOOD
+  #    stock: 200
+  #    interval-minutes: 30
+  # Valid categories: MISC, BLOCKS, REDSTONE, TOOLS, ARMOR, FOOD, FARMING, WOOD
+  # Also supports custom categories: CUSTOM_1 through CUSTOM_10
+
+# ================================================================
 # SPECIAL SHOP ITEMS (permissions and server-shop)
 # ================================================================
 # These are added dynamically via /shopadmin commands

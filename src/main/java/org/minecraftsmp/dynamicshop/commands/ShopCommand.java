@@ -14,6 +14,7 @@ import org.minecraftsmp.dynamicshop.gui.CategorySelectionGUI;
 import org.minecraftsmp.dynamicshop.gui.ShopGUI;
 import org.minecraftsmp.dynamicshop.managers.CategoryConfigManager;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
+import org.minecraftsmp.dynamicshop.transactions.Transaction;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -54,7 +55,25 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // Handle /shop sell <price>
+        // Handle /shop sellhand
+        if (args.length >= 1 && args[0].equalsIgnoreCase("sellhand")) {
+            if (!p.hasPermission("dynamicshop.use.sellhand")) {
+                p.sendMessage(plugin.getMessageManager().noPermission());
+                return true;
+            }
+            return handleSellHand(p);
+        }
+
+        // Handle /shop sellall
+        if (args.length >= 1 && args[0].equalsIgnoreCase("sellall")) {
+            if (!p.hasPermission("dynamicshop.use.sellall")) {
+                p.sendMessage(plugin.getMessageManager().noPermission());
+                return true;
+            }
+            return handleSellAll(p);
+        }
+
+        // Handle /shop sell <price> (player shop listing)
         if (args.length >= 2 && args[0].equalsIgnoreCase("sell")) {
             return handleSellCommand(p, args);
         }
@@ -143,6 +162,17 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
 
         // /shop <tab>
         if (args.length == 1) {
+            // Add sell commands
+            if ("sellhand".startsWith(args[0].toLowerCase())) {
+                out.add("sellhand");
+            }
+            if ("sellall".startsWith(args[0].toLowerCase())) {
+                out.add("sellall");
+            }
+            if ("sell".startsWith(args[0].toLowerCase())) {
+                out.add("sell");
+            }
+
             for (ItemCategory c : ItemCategory.values()) {
                 // Don't suggest special or hidden categories
                 if (c == ItemCategory.PERMISSIONS || c == ItemCategory.SERVER_SHOP || c == ItemCategory.PLAYER_SHOPS) {
@@ -160,6 +190,161 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         }
 
         return out;
+    }
+
+    // --------------------------------------------------------------------
+    // SELL HAND: sell entire held stack to the dynamic shop
+    // --------------------------------------------------------------------
+    private boolean handleSellHand(Player p) {
+        ItemStack held = p.getInventory().getItemInMainHand();
+        if (held == null || held.getType() == Material.AIR) {
+            p.sendMessage("§c✗ §7You're not holding anything!");
+            return true;
+        }
+
+        if (isDamaged(held)) {
+            p.sendMessage(plugin.getMessageManager().cannotSellDamaged());
+            return true;
+        }
+
+        Material mat = held.getType();
+        int amount = held.getAmount();
+
+        if (ShopDataManager.getBasePrice(mat) < 0) {
+            p.sendMessage(plugin.getMessageManager().cannotSell());
+            return true;
+        }
+
+        if (ShopDataManager.isSellDisabled(mat)) {
+            p.sendMessage("§cSelling this item is disabled.");
+            return true;
+        }
+
+        if (!ShopDataManager.canSell(mat, amount)) {
+            int limit = ShopDataManager.getSellLimit(mat);
+            if (limit <= 0) {
+                p.sendMessage("§cShop storage is full for this item.");
+                return true;
+            }
+            amount = Math.min(amount, limit);
+        }
+
+        double payout = ShopDataManager.getTotalSellValue(mat, amount);
+
+        // Remove items from hand
+        int remaining = held.getAmount() - amount;
+        if (remaining <= 0) {
+            p.getInventory().setItemInMainHand(null);
+        } else {
+            held.setAmount(remaining);
+        }
+
+        ShopDataManager.updateStock(mat, amount);
+        plugin.getEconomyManager().deposit(p, payout);
+
+        Map<String, String> ph = new HashMap<>();
+        ph.put("amount", String.valueOf(amount));
+        ph.put("item", mat.name().replace("_", " ").toLowerCase());
+        ph.put("price", plugin.getEconomyManager().format(payout));
+        p.sendMessage(plugin.getMessageManager().getMessage("sold-item-success", ph));
+
+        plugin.getTransactionLogger().log(Transaction.now(
+                p.getName(),
+                Transaction.TransactionType.SELL,
+                mat.name(),
+                amount,
+                payout,
+                ShopDataManager.detectCategory(mat).name(),
+                ""));
+
+        return true;
+    }
+
+    // --------------------------------------------------------------------
+    // SELL ALL: sell every sellable item in inventory
+    // --------------------------------------------------------------------
+    private boolean handleSellAll(Player p) {
+        // Gather sellable materials and counts
+        Map<Material, Integer> sellable = new java.util.LinkedHashMap<>();
+
+        for (ItemStack item : p.getInventory().getContents()) {
+            if (item == null || item.getType() == Material.AIR) continue;
+            if (isDamaged(item)) continue;
+
+            Material mat = item.getType();
+            if (ShopDataManager.getBasePrice(mat) < 0) continue;
+            if (ShopDataManager.isSellDisabled(mat)) continue;
+
+            sellable.merge(mat, item.getAmount(), Integer::sum);
+        }
+
+        if (sellable.isEmpty()) {
+            p.sendMessage("§c✗ §7You don't have any items to sell!");
+            return true;
+        }
+
+        double totalPayout = 0;
+        int totalItems = 0;
+        int itemTypes = 0;
+
+        for (Map.Entry<Material, Integer> entry : sellable.entrySet()) {
+            Material mat = entry.getKey();
+            int amount = entry.getValue();
+
+            // Check stock limits
+            if (!ShopDataManager.canSell(mat, amount)) {
+                int limit = ShopDataManager.getSellLimit(mat);
+                if (limit <= 0) continue;
+                amount = Math.min(amount, limit);
+            }
+
+            if (amount <= 0) continue;
+
+            double payout = ShopDataManager.getTotalSellValue(mat, amount);
+
+            // Remove items from inventory
+            int toRemove = amount;
+            for (int i = 0; i < p.getInventory().getSize(); i++) {
+                ItemStack item = p.getInventory().getItem(i);
+                if (item != null && item.getType() == mat && !isDamaged(item) && toRemove > 0) {
+                    int take = Math.min(item.getAmount(), toRemove);
+                    int newAmt = item.getAmount() - take;
+                    if (newAmt <= 0) {
+                        p.getInventory().setItem(i, null);
+                    } else {
+                        item.setAmount(newAmt);
+                    }
+                    toRemove -= take;
+                }
+            }
+
+            int actuallySold = amount - toRemove;
+            ShopDataManager.updateStock(mat, actuallySold);
+            totalPayout += payout;
+            totalItems += actuallySold;
+            itemTypes++;
+
+            plugin.getTransactionLogger().log(Transaction.now(
+                    p.getName(),
+                    Transaction.TransactionType.SELL,
+                    mat.name(),
+                    actuallySold,
+                    payout,
+                    ShopDataManager.detectCategory(mat).name(),
+                    ""));
+        }
+
+        if (totalItems == 0) {
+            p.sendMessage("§c✗ §7No items could be sold (shop storage may be full).");
+            return true;
+        }
+
+        plugin.getEconomyManager().deposit(p, totalPayout);
+
+        p.sendMessage("§a✓ §7Sold §f" + totalItems + " items §7(§e" + itemTypes + " types§7) for §a" +
+                plugin.getEconomyManager().format(totalPayout));
+
+        return true;
     }
 
     private boolean handleSellCommand(Player player, String[] args) {

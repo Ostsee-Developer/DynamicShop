@@ -85,6 +85,48 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             }
 
             // --------------------------------------------------------------
+            // /shopadmin setstock <item|all> <amount>
+            // --------------------------------------------------------------
+            case "setstock" -> {
+                if (args.length < 3) {
+                    sender.sendMessage("§cUsage: /shopadmin setstock <item|all> <amount>");
+                    return true;
+                }
+
+                double amount;
+                try {
+                    amount = Double.parseDouble(args[2]);
+                } catch (NumberFormatException e) {
+                    sender.sendMessage("§cInvalid number: " + args[2]);
+                    return true;
+                }
+
+                if (args[1].equalsIgnoreCase("all")) {
+                    int count = 0;
+                    for (Material m : ShopDataManager.getAllTrackedMaterials()) {
+                        ShopDataManager.setStockDirect(m, amount);
+                        count++;
+                    }
+                    ShopDataManager.saveDynamicData();
+                    sender.sendMessage("§a[DynamicShop] §fSet stock to §e" + amount + " §ffor §e" + count + " §fitems.");
+                } else {
+                    Material mat = Material.matchMaterial(args[1]);
+                    if (mat == null) {
+                        sender.sendMessage("§cUnknown item: " + args[1]);
+                        return true;
+                    }
+                    if (ShopDataManager.getBasePrice(mat) < 0) {
+                        sender.sendMessage("§cItem is not in the shop: " + args[1]);
+                        return true;
+                    }
+                    ShopDataManager.setStockDirect(mat, amount);
+                    ShopDataManager.saveDynamicData();
+                    sender.sendMessage("§a[DynamicShop] §fStock for §e" + mat.name() + " §fset to §e" + amount + "§f.");
+                }
+                return true;
+            }
+
+            // --------------------------------------------------------------
             // /shopadmin setinflation <percent>
             // --------------------------------------------------------------
             case "setinflation" -> {
@@ -644,6 +686,7 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§7/shopadmin remove perm <slot>");
         sender.sendMessage("§7/shopadmin open <player> <category>");
         sender.sendMessage("§7/shopadmin setinflation <percent>");
+        sender.sendMessage("§7/shopadmin setstock <item|all> <amount>");
         sender.sendMessage("§7/shopadmin setrate <item> <percent>");
         sender.sendMessage("§7/shopadmin changerate <item> <+/-amount>");
     }
@@ -685,6 +728,7 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             out.add("reload");
             out.add("add");
             out.add("remove");
+            out.add("setstock");
             out.add("resetshortage");
             out.add("setinflation");
             out.add("setrate");
@@ -714,6 +758,23 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 2 && args[0].equalsIgnoreCase("remove")) {
             out.add("perm");
+            return out;
+        }
+
+        // /shopadmin setstock <item|all>
+        if (args.length == 2 && args[0].equalsIgnoreCase("setstock")) {
+            out.add("all");
+            String partial = args[1].toUpperCase();
+            for (Material m : Material.values()) {
+                if (ShopDataManager.getBasePrice(m) >= 0 && m.name().startsWith(partial)) {
+                    out.add(m.name());
+                }
+            }
+            return out;
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("setstock")) {
+            out.add("<amount>");
             return out;
         }
 
