@@ -95,6 +95,107 @@ public class DynamicShop extends JavaPlugin {
             getLogger().info("[Restock] Added default restock config section (disabled).");
         }
 
+        // Auto-populate shortage decay setting for existing servers
+        if (!getConfig().isSet("dynamic-pricing.shortage-decay-percent-per-hour")) {
+            getConfig().set("dynamic-pricing.shortage-decay-percent-per-hour", 2.0);
+            saveConfig();
+            getLogger().info("[DynamicPricing] Added default shortage-decay-percent-per-hour (2.0) to config.");
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // AUTO-POPULATE MISSING CONFIG KEYS for existing servers
+        // This ensures all config options exist even on upgrades.
+        // ──────────────────────────────────────────────────────────────
+        boolean configChanged = false;
+
+        // Dynamic Pricing
+        if (!getConfig().isSet("dynamic-pricing.log-dynamic-pricing")) {
+            getConfig().set("dynamic-pricing.log-dynamic-pricing", false);
+            configChanged = true;
+        }
+        if (!getConfig().isSet("dynamic-pricing.restrict-buying-at-zero-stock")) {
+            getConfig().set("dynamic-pricing.restrict-buying-at-zero-stock", true);
+            configChanged = true;
+        }
+        if (!getConfig().isSet("dynamic-pricing.negative-stock-percent-per-item")) {
+            getConfig().set("dynamic-pricing.negative-stock-percent-per-item", 5.0);
+            configChanged = true;
+        }
+
+        // Economy
+        if (!getConfig().isSet("economy.sell_tax_percent")) {
+            getConfig().set("economy.sell_tax_percent", 30);
+            configChanged = true;
+        }
+        if (!getConfig().isSet("economy.transaction_cooldown_ms")) {
+            getConfig().set("economy.transaction_cooldown_ms", 0);
+            configChanged = true;
+        }
+
+        // GUI
+        if (!getConfig().isSet("gui.shop_menu_size")) {
+            getConfig().set("gui.shop_menu_size", 54);
+            configChanged = true;
+        }
+
+        // Logging
+        if (!getConfig().isSet("logging.max_recent_transactions")) {
+            getConfig().set("logging.max_recent_transactions", 10000);
+            configChanged = true;
+        }
+
+        // Player Shops
+        if (!getConfig().isSet("player-shops.enabled")) {
+            getConfig().set("player-shops.enabled", true);
+            configChanged = true;
+        }
+        if (!getConfig().isSet("player-shops.max-listings-per-player")) {
+            getConfig().set("player-shops.max-listings-per-player", 27);
+            configChanged = true;
+        }
+
+        // Webserver
+        if (!getConfig().isSet("webserver.enabled")) {
+            getConfig().set("webserver.enabled", true);
+            configChanged = true;
+        }
+        if (!getConfig().isSet("webserver.port")) {
+            getConfig().set("webserver.port", 7713);
+            configChanged = true;
+        }
+        if (!getConfig().isSet("webserver.bind")) {
+            getConfig().set("webserver.bind", "0.0.0.0");
+            configChanged = true;
+        }
+        if (!getConfig().isSet("webserver.cors.enabled")) {
+            getConfig().set("webserver.cors.enabled", true);
+            configChanged = true;
+        }
+        if (!getConfig().isSet("webserver.force-update-files")) {
+            getConfig().set("webserver.force-update-files", false);
+            configChanged = true;
+        }
+        // Web Admin Panel toggle — allows disabling admin panel while keeping the public dashboard
+        if (!getConfig().isSet("webserver.admin-enabled")) {
+            getConfig().set("webserver.admin-enabled", true);
+            configChanged = true;
+        }
+        // Hostname for generated admin links (empty = auto-detect)
+        if (!getConfig().isSet("webserver.hostname")) {
+            getConfig().set("webserver.hostname", "");
+            configChanged = true;
+        }
+
+        // Cross-server
+        if (!getConfig().isSet("cross-server.enabled")) {
+            getConfig().set("cross-server.enabled", false);
+            configChanged = true;
+        }
+
+        if (configChanged) {
+            saveConfig();
+            getLogger().info("[Config] Auto-populated missing config defaults.");
+        }
         // Initialize player shops
         this.playerShopManager = new PlayerShopManager(this);
         getLogger().info("Player shops enabled!");

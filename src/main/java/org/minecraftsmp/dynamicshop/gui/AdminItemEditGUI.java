@@ -46,6 +46,9 @@ public class AdminItemEditGUI {
     private static final int TOGGLE_ENABLED_SLOT = 24; // Row 3
     private static final int SELL_TOGGLE_SLOT = 25; // Row 3 - toggle sell
 
+    private static final int MAX_STOCK_SLOT = 30; // Row 4
+    private static final int MAX_STOCK_STORAGE_SLOT = 32; // Row 4
+
     private static final int BACK_BUTTON_SLOT = 40; // Bottom center
 
     public AdminItemEditGUI(DynamicShop plugin, Player player, Material material, AdminShopBrowseGUI parentGUI) {
@@ -91,6 +94,9 @@ public class AdminItemEditGUI {
         inventory.setItem(BUY_TOGGLE_SLOT, createBuyToggleButton());
         inventory.setItem(TOGGLE_ENABLED_SLOT, createToggleButton());
         inventory.setItem(SELL_TOGGLE_SLOT, createSellToggleButton());
+
+        inventory.setItem(MAX_STOCK_SLOT, createMaxStockButton());
+        inventory.setItem(MAX_STOCK_STORAGE_SLOT, createMaxStockStorageButton());
 
         // Back button
         inventory.setItem(BACK_BUTTON_SLOT, createBackButton());
@@ -163,9 +169,14 @@ public class AdminItemEditGUI {
     }
 
     private ItemStack createPriceIncreaseButton() {
-        long lastUpdate = ShopDataManager.getLastUpdate(material);
-        long hours = (System.currentTimeMillis() - lastUpdate) / (3600 * 1000);
-        long priceIncrease = hours * 2; // 2% per hour
+        double hours = ShopDataManager.getHoursInShortage(material);
+        double hourlyRate = org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.hourlyIncreasePercent / 100.0;
+        double multiplier = Math.pow(1.0 + hourlyRate, hours);
+        double percentIncrease = (multiplier - 1.0) * 100.0;
+        double maxPercent = (org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.maxPriceMultiplier - 1.0) * 100.0;
+        
+        boolean capped = percentIncrease >= maxPercent;
+        if (capped) percentIncrease = maxPercent;
 
         ItemStack item = new ItemStack(Material.CLOCK);
         ItemMeta meta = item.getItemMeta();
@@ -173,8 +184,8 @@ public class AdminItemEditGUI {
             meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§6§lPrice Increase %"));
 
             List<String> lore = new ArrayList<>();
-            lore.add("§7Hours since update: §f" + hours);
-            lore.add("§7Current increase: §c+" + priceIncrease + "%");
+            lore.add("§7Hours since update: §f" + String.format("%.1f", hours));
+            lore.add("§7Current increase: §c+" + String.format("%,.0f", percentIncrease) + "%" + (capped ? " (MAX)" : ""));
             lore.add("");
             lore.add("§7This increases buy price when");
             lore.add("§7stock is at 0 or negative.");
@@ -200,6 +211,50 @@ public class AdminItemEditGUI {
                     + org.minecraftsmp.dynamicshop.managers.CategoryConfigManager.getDisplayName(current));
             lore.add("");
             lore.add("§eClick to cycle");
+
+            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack createMaxStockButton() {
+        var itemConfig = ShopDataManager.itemConfigs.get(material);
+        Double maxStock = itemConfig != null ? itemConfig.maxStock() : null;
+
+        ItemStack item = new ItemStack(Material.CHEST);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§6§lPricing Max Stock"));
+
+            List<String> lore = new ArrayList<>();
+            lore.add("§7Limits price drop due to overstock");
+            lore.add("§7Current: §e" + (maxStock != null ? maxStock : "(Global Default)"));
+            lore.add("");
+            lore.add("§eClick to edit");
+            lore.add("§cRight-click to use global default");
+
+            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack createMaxStockStorageButton() {
+        var itemConfig = ShopDataManager.itemConfigs.get(material);
+        Integer maxStockStorage = itemConfig != null ? itemConfig.maxStockStorage() : null;
+
+        ItemStack item = new ItemStack(Material.TRAPPED_CHEST);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§6§lStorage Hard Limit"));
+
+            List<String> lore = new ArrayList<>();
+            lore.add("§7Prevents selling past this stock");
+            lore.add("§7Current: §e" + (maxStockStorage != null ? maxStockStorage : "Unlimited"));
+            lore.add("");
+            lore.add("§eClick to edit");
+            lore.add("§cRight-click to set unlimited");
 
             meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
             item.setItemMeta(meta);
@@ -316,7 +371,7 @@ public class AdminItemEditGUI {
     /**
      * Handle click events in this GUI
      */
-    public void handleClick(int slot) {
+    public void handleClick(int slot, boolean rightClick) {
         switch (slot) {
             // Stock adjustments
             case STOCK_MINUS_64 -> adjustStock(-64);
@@ -333,6 +388,8 @@ public class AdminItemEditGUI {
             case BUY_TOGGLE_SLOT -> toggleBuy();
             case TOGGLE_ENABLED_SLOT -> toggleEnabled();
             case SELL_TOGGLE_SLOT -> toggleSell();
+            case MAX_STOCK_SLOT -> openMaxStockEditor(rightClick);
+            case MAX_STOCK_STORAGE_SLOT -> openMaxStockStorageEditor(rightClick);
             case BACK_BUTTON_SLOT -> goBack();
         }
     }
@@ -368,25 +425,96 @@ public class AdminItemEditGUI {
     }
 
     private void openPriceIncreaseEditor() {
-        long hours = (System.currentTimeMillis() - ShopDataManager.getLastUpdate(material)) / (3600 * 1000);
-        int currentPercent = (int) (hours * 2);
+        double hours = ShopDataManager.getHoursInShortage(material);
+        double hourlyRate = org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.hourlyIncreasePercent / 100.0;
+        double multiplier = Math.pow(1.0 + hourlyRate, hours);
+        double currentPercent = (multiplier - 1.0) * 100.0;
+        double maxPercent = (org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.maxPriceMultiplier - 1.0) * 100.0;
+        if (currentPercent > maxPercent) currentPercent = maxPercent;
 
         plugin.getInputManager().requestInt(player,
                 "Enter price increase % for " + material.name(),
-                currentPercent,
+                (int) currentPercent,
                 percent -> {
                     if (percent != null) {
                         if (percent < 0) {
                             player.sendMessage("§c✗ §7Percentage cannot be negative!");
                         } else {
-                            // Calculate the timestamp that would result in this percentage
-                            long hoursNeeded = percent / 2;
-                            long newLastUpdate = System.currentTimeMillis() - (hoursNeeded * 3600 * 1000);
-                            ShopDataManager.setLastUpdate(material, newLastUpdate);
+                            // Reverse the formula to get the necessary hours
+                            // (percent/100) + 1 = (1 + hourlyRate)^hours
+                            double targetMultiplier = (percent / 100.0) + 1.0;
+                            double newHours = 0.0;
+                            if (hourlyRate > 0) {
+                                newHours = Math.log(targetMultiplier) / Math.log(1.0 + hourlyRate);
+                            }
+
+                            ShopDataManager.setLastUpdate(material, System.currentTimeMillis());
+                            ShopDataManager.setHoursInShortage(material, newHours);
+
                             player.sendMessage("§a✓ §7Price increase set to §c+" + percent + "%");
                         }
                     }
                     // Reopen this GUI with a NEW instance to avoid stale onClose handler
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        AdminItemEditGUI newGUI = new AdminItemEditGUI(plugin, player, material, parentGUI);
+                        plugin.getShopListener().registerAdminEdit(player, newGUI);
+                        newGUI.open();
+                    });
+                });
+    }
+
+    private void openMaxStockEditor(boolean rightClick) {
+        if (rightClick) {
+            ShopDataManager.setMaxStock(material, null);
+            player.sendMessage("§a✓ §7Max stock (pricing limit) reset to global default.");
+            render();
+            return;
+        }
+
+        double current = org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.maxStock;
+        var config = ShopDataManager.itemConfigs.get(material);
+        if (config != null && config.maxStock() != null) {
+            current = config.maxStock();
+        }
+
+        plugin.getInputManager().requestNumber(player,
+                "Enter max stock pricing curve limit",
+                current,
+                newVal -> {
+                    if (newVal != null) {
+                        ShopDataManager.setMaxStock(material, newVal < 0 ? null : newVal);
+                        player.sendMessage("§a✓ §7Max stock (pricing limit) updated.");
+                    }
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        AdminItemEditGUI newGUI = new AdminItemEditGUI(plugin, player, material, parentGUI);
+                        plugin.getShopListener().registerAdminEdit(player, newGUI);
+                        newGUI.open();
+                    });
+                });
+    }
+
+    private void openMaxStockStorageEditor(boolean rightClick) {
+        if (rightClick) {
+            ShopDataManager.setMaxStockStorage(material, null);
+            player.sendMessage("§a✓ §7Max stock storage (hard limit) reset to unlimited.");
+            render();
+            return;
+        }
+
+        int current = 1000000; // placeholder for unlimited
+        var config = ShopDataManager.itemConfigs.get(material);
+        if (config != null && config.maxStockStorage() != null) {
+            current = config.maxStockStorage();
+        }
+
+        plugin.getInputManager().requestInt(player,
+                "Enter hard storage limit (negative for unlimited)",
+                current,
+                newVal -> {
+                    if (newVal != null) {
+                        ShopDataManager.setMaxStockStorage(material, newVal < 0 ? null : newVal);
+                        player.sendMessage("§a✓ §7Max stock storage (hard limit) updated.");
+                    }
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         AdminItemEditGUI newGUI = new AdminItemEditGUI(plugin, player, material, parentGUI);
                         plugin.getShopListener().registerAdminEdit(player, newGUI);

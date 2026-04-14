@@ -29,7 +29,7 @@ public class ShopDataManager {
             Double stockRate) { // Per-item rate override (null = use global)
     }
 
-    static final Map<Material, ShopItemConfig> itemConfigs = new ConcurrentHashMap<>();
+    public static final Map<Material, ShopItemConfig> itemConfigs = new ConcurrentHashMap<>();
 
     // dynamic data
     static final Map<Material, Double> stockMap = new ConcurrentHashMap<>();
@@ -401,11 +401,20 @@ public class ShopDataManager {
         // Price function: P(s) = B * t * q^(-s), increasing as s decreases
         // Find threshold s_thresh where P(s) = maxPrice:
         //   B * t * q^(-s) = maxPrice  =>  s = -ln(maxPrice/(B*t)) / ln(q)
+
+        // Guard: if q == 1 (negativeStockPercent == 0), log(q) == 0 => flat price in negative region
+        double logQ = Math.log(q);
+        if (Math.abs(logQ) < 1e-12) {
+            // Flat price at B*t, clamped to maxPrice
+            double flatPrice = Math.min(B * t, maxPrice);
+            return flatPrice * (b - a);
+        }
+
         double sThresh;
         if (B * t >= maxPrice) {
             sThresh = 0.0; // entire negative region exceeds max
         } else {
-            sThresh = -Math.log(maxPrice / (B * t)) / Math.log(q);
+            sThresh = -Math.log(maxPrice / (B * t)) / logQ;
         }
 
         double total = 0.0;
@@ -419,7 +428,7 @@ public class ShopDataManager {
         // Normal (unclamped) portion: [max(a, sThresh), b]
         double normalStart = Math.max(a, sThresh);
         if (normalStart < b) {
-            total += B * t * (Math.pow(q, -normalStart) - Math.pow(q, -b)) / Math.log(q);
+            total += B * t * (Math.pow(q, -normalStart) - Math.pow(q, -b)) / logQ;
         }
 
         return total;
@@ -436,6 +445,12 @@ public class ShopDataManager {
         // P decreases as s' increases
         // MAX threshold: P(s') = maxPrice => s' = 2*L*(1 - maxPrice/(B*t)) / k
         // MIN threshold: P(s') = minPrice => s' = 2*L*(1 - minPrice/(B*t)) / k
+
+        // Guard: if k == 0 (no curve), price is flat at B*t throughout the mid region
+        if (Math.abs(k) < 1e-12) {
+            double flatPrice = Math.max(minPrice, Math.min(B * t, maxPrice));
+            return flatPrice * (b - a);
+        }
 
         double total = 0.0;
 
@@ -1032,33 +1047,71 @@ public class ShopDataManager {
 
     /**
      * Calculates the total hours this item has been in a shortage (stock <= 0).
-     * Returns: Stored Accumulated Hours + Live Current Duration
+     * Returns: Stored Accumulated Hours + Live Current Duration (if stock <= 0)
+     *          OR Stored Hours - Decay (if stock > 0)
+     *
+     * When stock is positive, shortage hours decay over time proportional to
+     * how close the stock is to max-stock:
+     *   decayRate = configuredRate * (stock / maxStock)
+     *   effectiveHours = storedHours - (decayRate * timeSinceLastUpdate)
      */
     public static double getHoursInShortage(Material mat) {
         double stored = shortageHoursMap.getOrDefault(mat, 0.0);
+        if (stored <= 0) return 0.0;
 
-        // If currently out of stock, add the "live" duration since last update
-        if (getStock(mat) <= 0) {
+        double stock = getStock(mat);
+
+        if (stock <= 0) {
+            // Currently out of stock — add live duration since last update
             long diff = System.currentTimeMillis() - getLastUpdate(mat);
             stored += (diff / 3600000.0);
+        } else {
+            // Stock is positive — apply decay based on how full the shop is
+            double decayRate = ConfigCacheManager.shortageDecayPercentPerHour;
+            if (decayRate > 0) {
+                ShopItemConfig cfg = itemConfigs.get(mat);
+                double L = (cfg != null && cfg.maxStock != null) ? cfg.maxStock : ConfigCacheManager.maxStock;
+                double stockRatio = Math.min(stock / L, 1.0); // 0.0 → 1.0
+
+                long diff = System.currentTimeMillis() - getLastUpdate(mat);
+                double hoursSinceUpdate = diff / 3600000.0;
+
+                // Decay: the fuller the shop, the faster shortage hours drain
+                double decay = decayRate * stockRatio * hoursSinceUpdate;
+                stored = Math.max(0.0, stored - decay);
+            }
         }
 
         return stored;
     }
 
     /**
-     * Helper to "bake" the current live shortage duration into the map.
+     * Helper to "bake" the current live shortage duration OR decay into the map.
      * Call this BEFORE resetting lastUpdate or changing stock.
      */
     private static void accumulateShortage(Material mat) {
-        if (getStock(mat) <= 0) {
-            long now = System.currentTimeMillis();
-            long last = getLastUpdate(mat);
-            double deltaHours = (now - last) / 3600000.0;
+        double stored = shortageHoursMap.getOrDefault(mat, 0.0);
+        double stock = getStock(mat);
+        long now = System.currentTimeMillis();
+        long last = getLastUpdate(mat);
+        double deltaHours = (now - last) / 3600000.0;
 
-            double currentStored = shortageHoursMap.getOrDefault(mat, 0.0);
-            shortageHoursMap.put(mat, currentStored + deltaHours);
+        if (stock <= 0) {
+            // Out of stock — accumulate shortage time
+            shortageHoursMap.put(mat, stored + deltaHours);
             markDirty(mat);
+        } else if (stored > 0) {
+            // Stock is positive and we have stored shortage hours — apply decay
+            double decayRate = ConfigCacheManager.shortageDecayPercentPerHour;
+            if (decayRate > 0) {
+                ShopItemConfig cfg = itemConfigs.get(mat);
+                double L = (cfg != null && cfg.maxStock != null) ? cfg.maxStock : ConfigCacheManager.maxStock;
+                double stockRatio = Math.min(stock / L, 1.0);
+                double decay = decayRate * stockRatio * deltaHours;
+                double newStored = Math.max(0.0, stored - decay);
+                shortageHoursMap.put(mat, newStored);
+                markDirty(mat);
+            }
         }
     }
 
@@ -1281,6 +1334,34 @@ public class ShopDataManager {
         itemConfigs.put(mat, newConfig);
 
         plugin.getConfig().set("items." + mat.name() + ".disable-sell", disabled);
+        plugin.saveConfig();
+    }
+
+    /**
+     * Set max stock (pricing curve limit) for an item
+     */
+    public static void setMaxStock(Material mat, Double max) {
+        ShopItemConfig old = itemConfigs.get(mat);
+        if (old == null) return;
+        ShopItemConfig newConfig = new ShopItemConfig(old.basePrice(), max, old.minStock(),
+                old.maxStockStorage(), old.minStockStorage(), old.disableBuy(), old.disableSell(), old.categoryOverride(), old.stockRate());
+        itemConfigs.put(mat, newConfig);
+
+        plugin.getConfig().set("items." + mat.name() + ".max-stock", max);
+        plugin.saveConfig();
+    }
+
+    /**
+     * Set max stock storage (hard limit) for an item
+     */
+    public static void setMaxStockStorage(Material mat, Integer max) {
+        ShopItemConfig old = itemConfigs.get(mat);
+        if (old == null) return;
+        ShopItemConfig newConfig = new ShopItemConfig(old.basePrice(), old.maxStock(), old.minStock(),
+                max, old.minStockStorage(), old.disableBuy(), old.disableSell(), old.categoryOverride(), old.stockRate());
+        itemConfigs.put(mat, newConfig);
+
+        plugin.getConfig().set("items." + mat.name() + ".max-stock-storage", max);
         plugin.saveConfig();
     }
 

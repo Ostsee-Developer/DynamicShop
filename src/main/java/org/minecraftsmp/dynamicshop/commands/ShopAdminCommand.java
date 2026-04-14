@@ -159,12 +159,12 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             }
 
             // --------------------------------------------------------------
-            // /shopadmin setrate <item> <percent>
+            // /shopadmin setshortagerate <item> <percent>
             // --------------------------------------------------------------
-            case "setrate" -> {
+            case "setshortagerate" -> {
                 if (args.length < 3) {
-                    sender.sendMessage("§cUsage: /shopadmin setrate <item> <percent>");
-                    sender.sendMessage("§7Sets the price change rate for a specific item.");
+                    sender.sendMessage("§cUsage: /shopadmin setshortagerate <item> <percent>");
+                    sender.sendMessage("§7Sets how steeply price rises per unit of negative stock depth.");
                     sender.sendMessage("§7Global default: §e" + ConfigCacheManager.negativeStockPercentPerItem + "%");
                     return true;
                 }
@@ -190,17 +190,17 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
 
                 ShopDataManager.setStockRate(mat, percent);
 
-                sender.sendMessage("§a[DynamicShop] §fRate for §e" + mat.name() + " §fset to §e" + percent + "%§f.");
+                sender.sendMessage("§a[DynamicShop] §fShortage rate for §e" + mat.name() + " §fset to §e" + percent + "%§f.");
                 return true;
             }
 
             // --------------------------------------------------------------
-            // /shopadmin changerate <item> <+/-percent>
+            // /shopadmin changeshortagerate <item> <+/-percent>
             // --------------------------------------------------------------
-            case "changerate" -> {
+            case "changeshortagerate" -> {
                 if (args.length < 3) {
-                    sender.sendMessage("§cUsage: /shopadmin changerate <item> <amount>");
-                    sender.sendMessage("§7Adds or subtracts from the item's current rate.");
+                    sender.sendMessage("§cUsage: /shopadmin changeshortagerate <item> <amount>");
+                    sender.sendMessage("§7Adds or subtracts from the item's current shortage rate.");
                     return true;
                 }
 
@@ -224,7 +224,7 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                 ShopDataManager.setStockRate(mat, newRate);
 
                 String sign = delta >= 0 ? "+" : "";
-                sender.sendMessage("§a[DynamicShop] §fRate for §e" + mat.name() + " §f" + sign + delta
+                sender.sendMessage("§a[DynamicShop] §fShortage rate for §e" + mat.name() + " §f" + sign + delta
                         + "% → §e" + String.format("%.1f", newRate) + "%§f.");
                 return true;
             }
@@ -256,6 +256,71 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             case "reload" -> {
                 plugin.reload(); // Use centralized reload method
                 sender.sendMessage(plugin.getMessageManager().getMessage("reloaded"));
+                return true;
+            }
+
+            // --------------------------------------------------------------
+            // /shopadmin webadmin
+            // --------------------------------------------------------------
+            case "webadmin" -> {
+                if (!sender.isOp()) {
+                    sender.sendMessage("§cOnly server operators can use this command.");
+                    return true;
+                }
+
+                var webServer = plugin.getWebServer();
+                if (webServer == null) {
+                    sender.sendMessage("§c[DynamicShop] Web server is not running. Enable it in config.yml.");
+                    return true;
+                }
+
+                if (!plugin.getConfig().getBoolean("webserver.admin-enabled", true)) {
+                    sender.sendMessage("§c[DynamicShop] Web admin panel is disabled in config.yml (webserver.admin-enabled: false).");
+                    return true;
+                }
+
+                // Use in-game name for the admin account
+                String playerName = (sender instanceof Player p) ? p.getName() : "Console";
+                String token = webServer.getTokenManager().generateToken(playerName);
+                int port = plugin.getConfig().getInt("webserver.port", 7713);
+
+                // Use configured hostname, or detect from the player's connection address
+                String hostname = plugin.getConfig().getString("webserver.hostname", "");
+                if (hostname == null || hostname.isEmpty()) {
+                    // Try the IP/domain the player used to connect (best for external access)
+                    if (sender instanceof Player p) {
+                        try {
+                            var vhost = p.getVirtualHost();
+                            if (vhost != null) {
+                                hostname = vhost.getHostString();
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    // Fall back to server-ip from server.properties
+                    if (hostname == null || hostname.isEmpty() || "0.0.0.0".equals(hostname)) {
+                        String serverIp = Bukkit.getIp();
+                        if (serverIp != null && !serverIp.isEmpty() && !"0.0.0.0".equals(serverIp)) {
+                            hostname = serverIp;
+                        } else {
+                            hostname = "localhost";
+                        }
+                    }
+                }
+                String url = "http://" + hostname + ":" + port + "/admin.html?token=" + token;
+
+                sender.sendMessage("§a[DynamicShop] §fWeb Admin registration link for §e" + playerName + "§f!");
+                sender.sendMessage("§e§n" + url);
+                sender.sendMessage("§7This link expires in §f30 minutes§7.");
+                sender.sendMessage("§7Do not share this link — it grants full admin access.");
+
+                // If player, send clickable link
+                if (sender instanceof Player p) {
+                    net.kyori.adventure.text.Component clickable = net.kyori.adventure.text.Component.text("§a§l[Click here to open Admin Panel]")
+                            .clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(url))
+                            .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(
+                                    net.kyori.adventure.text.Component.text("Click to open the web admin panel")));
+                    p.sendMessage(clickable);
+                }
                 return true;
             }
 
@@ -687,8 +752,8 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§7/shopadmin open <player> <category>");
         sender.sendMessage("§7/shopadmin setinflation <percent>");
         sender.sendMessage("§7/shopadmin setstock <item|all> <amount>");
-        sender.sendMessage("§7/shopadmin setrate <item> <percent>");
-        sender.sendMessage("§7/shopadmin changerate <item> <+/-amount>");
+        sender.sendMessage("§7/shopadmin setshortagerate <item> <percent>");
+        sender.sendMessage("§7/shopadmin changeshortagerate <item> <+/-amount>");
     }
 
     private void sendAddHelp(CommandSender sender) {
@@ -731,11 +796,12 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             out.add("setstock");
             out.add("resetshortage");
             out.add("setinflation");
-            out.add("setrate");
-            out.add("changerate");
+            out.add("setshortagerate");
+            out.add("changeshortagerate");
             out.add("testbedrock");
             out.add("categories");
             out.add("open");
+            out.add("webadmin");
             return out;
         }
 
@@ -778,8 +844,8 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             return out;
         }
 
-        // Tab complete item names for setrate/changerate
-        if (args.length == 2 && (args[0].equalsIgnoreCase("setrate") || args[0].equalsIgnoreCase("changerate"))) {
+        // Tab complete item names for setshortagerate/changeshortagerate
+        if (args.length == 2 && (args[0].equalsIgnoreCase("setshortagerate") || args[0].equalsIgnoreCase("changeshortagerate"))) {
             String partial = args[1].toUpperCase();
             for (Material m : Material.values()) {
                 if (ShopDataManager.getBasePrice(m) >= 0 && m.name().startsWith(partial)) {
@@ -789,12 +855,12 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             return out;
         }
 
-        if (args.length == 3 && args[0].equalsIgnoreCase("setrate")) {
+        if (args.length == 3 && args[0].equalsIgnoreCase("setshortagerate")) {
             out.add("<percent>");
             return out;
         }
 
-        if (args.length == 3 && args[0].equalsIgnoreCase("changerate")) {
+        if (args.length == 3 && args[0].equalsIgnoreCase("changeshortagerate")) {
             out.add("<+/-amount>");
             return out;
         }

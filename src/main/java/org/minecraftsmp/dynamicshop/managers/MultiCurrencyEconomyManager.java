@@ -389,6 +389,10 @@ public class MultiCurrencyEconomyManager {
      * Format money with explicit currency
      */
     public String format(double value, String currency) {
+        // Guard: BigDecimal cannot handle NaN or Infinity (causes NumberFormatException)
+        if (!Double.isFinite(value)) {
+            return "N/A";
+        }
         if (useCoinEngine) {
             Currency curr = getCoinEngineCurrency(currency);
             if (curr == null) {
@@ -408,6 +412,10 @@ public class MultiCurrencyEconomyManager {
      * Used when currency context is not available
      */
     public String format(double value) {
+        // Guard: BigDecimal cannot handle NaN or Infinity (causes NumberFormatException)
+        if (!Double.isFinite(value)) {
+            return "N/A";
+        }
         if (useCoinEngine) {
             return format(value, defaultCurrency);
         } else {

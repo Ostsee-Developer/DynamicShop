@@ -40,14 +40,11 @@ public class RestockManager {
         boolean enabled = plugin.getConfig().getBoolean("restock.enabled", false);
         if (!enabled) return;
 
-        List<?> rules = plugin.getConfig().getList("restock.rules");
-        if (rules == null) return;
-
         ConfigurationSection restockSec = plugin.getConfig().getConfigurationSection("restock");
         if (restockSec == null) return;
 
         List<?> rulesList = restockSec.getList("rules");
-        if (rulesList == null) return;
+        if (rulesList == null || rulesList.isEmpty()) return;
 
         // Parse rules from the list of maps
         for (Object obj : rulesList) {
@@ -64,13 +61,22 @@ public class RestockManager {
 
             double targetStock = map.containsKey("stock") ? ((Number) map.get("stock")).doubleValue() : 100.0;
             int intervalMinutes = map.containsKey("interval-minutes") ? ((Number) map.get("interval-minutes")).intValue() : 60;
+
+            // Guard: enforce minimum 1-minute interval to prevent runaway timers
+            if (intervalMinutes < 1) {
+                Bukkit.getLogger().warning("[DynamicShop] Restock: interval-minutes for " + categoryName
+                        + " was " + intervalMinutes + ", clamping to 1 minute minimum.");
+                intervalMinutes = 1;
+            }
+
             long intervalTicks = intervalMinutes * 60L * 20L; // minutes -> ticks
 
             RestockRule rule = new RestockRule(category, targetStock, intervalTicks);
             scheduleRule(rule);
 
             Bukkit.getLogger().info("[DynamicShop] Restock: " + category.getDisplayName()
-                    + " → " + (int) targetStock + " stock every " + intervalMinutes + " min");
+                    + " → " + (int) targetStock + " stock every " + intervalMinutes + " min"
+                    + " (" + intervalTicks + " ticks)");
         }
     }
 

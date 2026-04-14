@@ -29,12 +29,30 @@ webserver:
   port: 7713
   bind: "0.0.0.0"
 
+  # Hostname/IP used in generated admin panel links.
+  # Set this to your server's public IP or domain name.
+  # Leave empty to auto-detect from server-ip or machine hostname.
+  # Examples: "play.myserver.com", "198.51.100.1"
+  hostname: ""
+
+  # Enable/disable the web admin panel.
+  # When false, the public shop dashboard still works but
+  # /shopadmin webadmin and all admin API endpoints are disabled.
+  admin-enabled: true
+
   # Force re-extract web files from JAR on startup
   force-update-files: false
 
   # CORS settings for web API
   cors:
     enabled: true
+
+  # Native SSL Support (Not recommended, use Nginx reverse proxy instead)
+  # Allows you to serve the Web Dashboard over directly HTTPS by providing a Java KeyStore (.jks)
+  ssl:
+    enabled: false
+    keystore-path: "keystore.jks"
+    keystore-password: "password"
 
 # ================================================================
 # TRANSACTION LOGGING
@@ -75,6 +93,21 @@ dynamic-pricing:
   # Hourly price increase when stock is zero or negative
   # Applies to BOTH zero stock AND negative stock
   hourly-increase-percent: 2.0   # +2% per hour when out of stock
+
+  # --- Shortage Decay ---
+  # When stock is POSITIVE, accumulated shortage hours will slowly decay.
+  # The decay rate scales with how full the shop is (stock / max-stock).
+  # At max stock: full decay rate. At 1 stock: barely any decay.
+  # Formula: effective decay = rate × (current-stock / max-stock) per hour
+  #
+  # Example with rate 2.0 and max-stock 500:
+  #   Stock 1   → 0.004 hrs/hr decay (nearly zero)
+  #   Stock 50  → 0.2 hrs/hr decay
+  #   Stock 250 → 1.0 hrs/hr decay
+  #   Stock 500 → 2.0 hrs/hr decay (full rate)
+  #
+  # Set to 0 to disable decay entirely (shortage hours persist until manual reset).
+  shortage-decay-percent-per-hour: 2.0
 
   # --- Stock Control ---
   # Prevent players from buying items when stock reaches zero

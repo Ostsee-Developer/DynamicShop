@@ -26,6 +26,7 @@ public class ConfigCacheManager {
     public static double negativeStockPercentPerItem = 5.0;
     public static boolean useTimeInflation = true;
     public static double hourlyIncreasePercent = 2.0;
+    public static double shortageDecayPercentPerHour = 2.0;
     public static boolean restrictBuyingAtZeroStock = false;
     public static boolean logDynamicPricing = false;
 
@@ -90,6 +91,7 @@ public class ConfigCacheManager {
                 5.0);
         useTimeInflation = plugin.getConfig().getBoolean("dynamic-pricing.use-time-inflation", true);
         hourlyIncreasePercent = plugin.getConfig().getDouble("dynamic-pricing.hourly-increase-percent", 2.0);
+        shortageDecayPercentPerHour = plugin.getConfig().getDouble("dynamic-pricing.shortage-decay-percent-per-hour", 2.0);
 
         restrictBuyingAtZeroStock = plugin.getConfig().getBoolean("dynamic-pricing.restrict-buying-at-zero-stock",
                 false);

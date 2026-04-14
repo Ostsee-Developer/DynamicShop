@@ -6,10 +6,13 @@ import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.staticfiles.Location;
 import io.javalin.json.JavalinJackson;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
+import org.minecraftsmp.dynamicshop.managers.ConfigCacheManager;
+import org.minecraftsmp.dynamicshop.managers.CategoryConfigManager;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
 import org.minecraftsmp.dynamicshop.transactions.Transaction;
 
@@ -24,6 +27,9 @@ public class WebServer {
 
     private final DynamicShop plugin;
     private Javalin app;
+    private final WebAdminTokenManager tokenManager = new WebAdminTokenManager();
+    private WebAdminUserManager userManager;
+    private WebAdminAuditLog auditLog;
 
     // Cache for /api/shop/items endpoint (60 second TTL)
     private static final long CACHE_TTL_MS = 60_000; // 60 seconds
@@ -32,6 +38,8 @@ public class WebServer {
 
     public WebServer(DynamicShop plugin) {
         this.plugin = plugin;
+        this.userManager = new WebAdminUserManager(plugin);
+        this.auditLog = new WebAdminAuditLog(plugin);
     }
 
     public void start() {
@@ -59,6 +67,7 @@ public class WebServer {
                 if (plugin.getConfig().getBoolean("webserver.cors.enabled", true)) {
                     config.plugins.enableCors(cors -> cors.add(rule -> rule.anyHost()));
                 }
+
             }).start(host, port);
 
             // Basic endpoints
@@ -81,6 +90,43 @@ public class WebServer {
             app.get("/api/shop/items", this::handleShopItems);
             app.get("/api/shop/item/{item}", this::handleShopItemDetail);
             app.get("/api/shop/categories", this::handleShopCategories);
+            // AUTH + ADMIN ENDPOINTS (only if admin panel is enabled)
+            if (plugin.getConfig().getBoolean("webserver.admin-enabled", true)) {
+                // AUTH ENDPOINTS (no auth required)
+                app.post("/api/auth/register", this::handleRegister);
+                app.post("/api/auth/login", this::handleLogin);
+                app.get("/api/auth/verify", this::handleVerify);
+
+                // ADMIN API ENDPOINTS (token or session auth required)
+                app.before("/api/admin/*", ctx -> {
+                    // Check one-time token first
+                    String token = ctx.queryParam("token");
+                    if (token == null) token = ctx.header("X-Admin-Token");
+                    if (tokenManager.isValid(token)) return; // one-time token valid
+
+                    // Check session token
+                    String session = ctx.queryParam("session");
+                    if (session == null) session = ctx.header("X-Session-Token");
+                    if (userManager.isValidSession(session)) return; // session valid
+
+                    ctx.status(401).json(Map.of("error", "Unauthorized — invalid or expired token"));
+                });
+                app.get("/api/admin/items", this::handleAdminItems);
+                app.get("/api/admin/item/{item}", this::handleAdminItemDetail);
+                app.post("/api/admin/item/{item}", this::handleAdminItemUpdate);
+                app.get("/api/admin/config", this::handleAdminConfigGet);
+                app.post("/api/admin/config", this::handleAdminConfigUpdate);
+                app.post("/api/admin/resetshortage", this::handleAdminResetShortage);
+                app.post("/api/admin/resetshortage/{item}", this::handleAdminResetShortageItem);
+                app.get("/api/admin/categories", this::handleAdminCategories);
+                app.post("/api/admin/category/{category}", this::handleAdminCategoryUpdate);
+                app.get("/api/admin/audit", this::handleAdminAudit);
+                plugin.getLogger().info("Web admin panel enabled.");
+            } else {
+                // Admin disabled — serve a simple message if someone hits admin.html
+                app.get("/api/auth/verify", ctx -> ctx.status(403).json(Map.of("valid", false, "disabled", true)));
+                plugin.getLogger().info("Web admin panel DISABLED via config.");
+            }
 
             plugin.getLogger().info("Web dashboard → http://" + host + ":" + port);
         } catch (Exception e) {
@@ -97,6 +143,23 @@ public class WebServer {
             app = null;
         }
     }
+    private String getAdminUsername(io.javalin.http.Context ctx) {
+        String token = ctx.queryParam("token");
+        if (token == null) token = ctx.header("X-Admin-Token");
+        if (tokenManager.isValid(token)) {
+            String name = tokenManager.getPlayerName(token);
+            return name != null ? name : "unknown";
+        }
+
+        String session = ctx.queryParam("session");
+        if (session == null) session = ctx.header("X-Session-Token");
+        if (userManager.isValidSession(session)) {
+            String name = userManager.getUsername(session);
+            return name != null ? name : "unknown";
+        }
+
+        return "unknown";
+    }
 
     public void stop() {
         if (app != null)
@@ -104,7 +167,7 @@ public class WebServer {
     }
 
     private void extractWebFiles(File webDir) {
-        String[] webFiles = { "index.html", "style.css", "dashboard.js", "items.html", "items.js" };
+        String[] webFiles = { "index.html", "style.css", "dashboard.js", "items.html", "items.js", "admin.html" };
         boolean forceUpdate = plugin.getConfig().getBoolean("webserver.force-update-files", false);
 
         for (String fileName : webFiles) {
@@ -649,8 +712,716 @@ public class WebServer {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // AUTH ENDPOINTS
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * POST /api/auth/register
+     * Register a new admin user. Requires a valid one-time token.
+     * Body: { "token": "...", "username": "...", "password": "..." }
+     */
+    private void handleRegister(Context ctx) {
+        Map<String, Object> body;
+        try {
+            body = ctx.bodyAsClass(Map.class);
+        } catch (Exception e) {
+            ctx.status(400).json(Map.of("error", "Invalid JSON"));
+            return;
+        }
+
+        String token = (String) body.get("token");
+        String password = (String) body.get("password");
+
+        if (token == null || password == null) {
+            ctx.status(400).json(Map.of("error", "Missing required fields: token, password"));
+            return;
+        }
+
+        if (!tokenManager.isValid(token)) {
+            ctx.status(401).json(Map.of("error", "Invalid or expired registration token"));
+            return;
+        }
+
+        // Username comes from the token (player's in-game name)
+        String username = tokenManager.getPlayerName(token);
+        if (username == null) {
+            ctx.status(400).json(Map.of("error", "Token has no associated player name"));
+            return;
+        }
+
+        if (password.length() < 4) {
+            ctx.status(400).json(Map.of("error", "Password must be at least 4 characters"));
+            return;
+        }
+
+        if (!userManager.register(username, password)) {
+            ctx.status(409).json(Map.of("error", "Account already exists for " + username));
+            return;
+        }
+
+        // Consume the one-time token after successful registration
+        tokenManager.revoke(token);
+
+        // Auto-login after registration
+        String session = userManager.login(username, password);
+
+        auditLog.log(username, "account_created", username, "Admin account registered via web");
+
+        ctx.json(Map.of("success", true, "session", session, "username", username,
+                "message", "Account created for " + username + "!"));
+    }
+
+    /**
+     * POST /api/auth/login
+     * Login with username/password.
+     * Body: { "username": "...", "password": "..." }
+     */
+    private void handleLogin(Context ctx) {
+        Map<String, Object> body;
+        try {
+            body = ctx.bodyAsClass(Map.class);
+        } catch (Exception e) {
+            ctx.status(400).json(Map.of("error", "Invalid JSON"));
+            return;
+        }
+
+        String username = (String) body.get("username");
+        String password = (String) body.get("password");
+
+        if (username == null || password == null) {
+            ctx.status(400).json(Map.of("error", "Missing username or password"));
+            return;
+        }
+
+        String session = userManager.login(username, password);
+        if (session == null) {
+            ctx.status(401).json(Map.of("error", "Invalid username or password"));
+            return;
+        }
+
+        ctx.json(Map.of("success", true, "session", session));
+    }
+
+    /**
+     * GET /api/auth/verify?token=...&session=...
+     * Verify that a token or session is valid. Returns auth type.
+     */
+    private void handleVerify(Context ctx) {
+        String token = ctx.queryParam("token");
+        String session = ctx.queryParam("session");
+
+        if (token != null && tokenManager.isValid(token)) {
+            String playerName = tokenManager.getPlayerName(token);
+            boolean alreadyRegistered = playerName != null && userManager.userExists(playerName);
+            Map<String, Object> resp = new LinkedHashMap<>();
+            resp.put("valid", true);
+            resp.put("type", "token");
+            resp.put("playerName", playerName);
+            resp.put("alreadyRegistered", alreadyRegistered);
+            ctx.json(resp);
+            return;
+        }
+
+        if (session != null && userManager.isValidSession(session)) {
+            ctx.json(Map.of("valid", true, "type", "session"));
+            return;
+        }
+
+        ctx.status(401).json(Map.of("valid", false));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ADMIN API ENDPOINTS (token-protected)
+    // ═══════════════════════════════════════════════════════════════
+
+    public WebAdminTokenManager getTokenManager() {
+        return tokenManager;
+    }
+
+    public WebAdminUserManager getUserManager() {
+        return userManager;
+    }
+
+    /**
+     * GET /api/admin/items
+     * Returns all items with full admin data (stock, base price, shortage, rates, etc.)
+     */
+    private void handleAdminItems(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (Material mat : ShopDataManager.getAllTrackedMaterials()) {
+            double basePrice = ShopDataManager.getBasePrice(mat);
+            if (basePrice < 0) continue;
+
+            Map<String, Object> item = buildAdminItemMap(mat);
+            items.add(item);
+        }
+        items.sort(Comparator.comparing(m -> (String) m.get("displayName")));
+        ctx.json(items);
+    }
+
+    /**
+     * GET /api/admin/item/{item}
+     * Returns detailed admin data for a single item
+     */
+    private void handleAdminItemDetail(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+
+        Material mat = Material.matchMaterial(ctx.pathParam("item"));
+        if (mat == null || ShopDataManager.getBasePrice(mat) < 0) {
+            ctx.status(404).json(Map.of("error", "Item not found"));
+            return;
+        }
+        ctx.json(buildAdminItemMap(mat));
+    }
+
+    /**
+     * POST /api/admin/item/{item}
+     * Update item properties. Accepts JSON body with optional fields:
+     *   basePrice, stock, stockRate, shortageHours, buyDisabled, sellDisabled, disabled, category
+     */
+    private void handleAdminItemUpdate(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+
+        Material mat = Material.matchMaterial(ctx.pathParam("item"));
+        if (mat == null || ShopDataManager.getBasePrice(mat) < 0) {
+            ctx.status(404).json(Map.of("error", "Item not found"));
+            return;
+        }
+
+        // Parse JSON body
+        Map<String, Object> body;
+        try {
+            body = ctx.bodyAsClass(Map.class);
+        } catch (Exception e) {
+            ctx.status(400).json(Map.of("error", "Invalid JSON body"));
+            return;
+        }
+
+        // Apply changes on main thread for thread safety
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (body.containsKey("basePrice")) {
+                double price = ((Number) body.get("basePrice")).doubleValue();
+                ShopDataManager.setBasePrice(mat, price);
+            }
+            if (body.containsKey("stock")) {
+                double stock = ((Number) body.get("stock")).doubleValue();
+                ShopDataManager.setStockDirect(mat, stock);
+            }
+            if (body.containsKey("stockRate")) {
+                double rate = ((Number) body.get("stockRate")).doubleValue();
+                ShopDataManager.setStockRate(mat, rate);
+            }
+            if (body.containsKey("shortageHours")) {
+                double hours = ((Number) body.get("shortageHours")).doubleValue();
+                ShopDataManager.setHoursInShortage(mat, hours);
+                ShopDataManager.setLastUpdate(mat, System.currentTimeMillis());
+            }
+            if (body.containsKey("buyDisabled")) {
+                ShopDataManager.setBuyDisabled(mat, (Boolean) body.get("buyDisabled"));
+            }
+            if (body.containsKey("sellDisabled")) {
+                ShopDataManager.setSellDisabled(mat, (Boolean) body.get("sellDisabled"));
+            }
+            if (body.containsKey("disabled")) {
+                ShopDataManager.setItemDisabled(mat, (Boolean) body.get("disabled"));
+            }
+            if (body.containsKey("maxStock")) {
+                Object maxStockObj = body.get("maxStock");
+                Double maxStock = maxStockObj == null ? null : ((Number) maxStockObj).doubleValue();
+                ShopDataManager.setMaxStock(mat, maxStock);
+            }
+            if (body.containsKey("maxStockStorage")) {
+                Object maxStorageObj = body.get("maxStockStorage");
+                Integer maxStorage = maxStorageObj == null ? null : ((Number) maxStorageObj).intValue();
+                ShopDataManager.setMaxStockStorage(mat, maxStorage);
+            }
+            if (body.containsKey("category")) {
+                try {
+                    ItemCategory cat = ItemCategory.valueOf(((String) body.get("category")).toUpperCase());
+                    ShopDataManager.setCategoryOverride(mat, cat);
+                } catch (Exception ignored) {}
+            }
+
+            ShopDataManager.saveDynamicData();
+        });
+
+        // Audit log
+        StringBuilder changes = new StringBuilder();
+        body.forEach((k, v) -> changes.append(k).append("=").append(v).append(", "));
+        auditLog.log(getAdminUsername(ctx), "item_update", mat.name(), changes.toString());
+
+        ctx.json(Map.of("success", true, "item", mat.name()));
+    }
+
+    /**
+     * GET /api/admin/config
+     * Returns all dynamic-pricing config values
+     */
+    private void handleAdminConfigGet(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("dynamicPricingEnabled", ConfigCacheManager.dynamicPricingEnabled);
+        config.put("useStockCurve", ConfigCacheManager.useStockCurve);
+        config.put("curveStrength", ConfigCacheManager.curveStrength);
+        config.put("maxStock", ConfigCacheManager.maxStock);
+        config.put("minPriceMultiplier", ConfigCacheManager.minPriceMultiplier);
+        config.put("maxPriceMultiplier", ConfigCacheManager.maxPriceMultiplier);
+        config.put("negativeStockPercentPerItem", ConfigCacheManager.negativeStockPercentPerItem);
+        config.put("useTimeInflation", ConfigCacheManager.useTimeInflation);
+        config.put("hourlyIncreasePercent", ConfigCacheManager.hourlyIncreasePercent);
+        config.put("shortageDecayPercentPerHour", ConfigCacheManager.shortageDecayPercentPerHour);
+        config.put("restrictBuyingAtZeroStock", ConfigCacheManager.restrictBuyingAtZeroStock);
+        config.put("logDynamicPricing", plugin.getConfig().getBoolean("dynamic-pricing.log-dynamic-pricing", false));
+
+        // Economy
+        config.put("sellTaxPercent", plugin.getConfig().getDouble("economy.sell_tax_percent", 30));
+        config.put("transactionCooldownMs", plugin.getConfig().getInt("economy.transaction_cooldown_ms", 0));
+
+        // GUI
+        config.put("shopMenuSize", plugin.getConfig().getInt("gui.shop_menu_size", 54));
+
+        // Logging
+        config.put("maxRecentTransactions", plugin.getConfig().getInt("logging.max_recent_transactions", 10000));
+
+        // Player Shops
+        config.put("playerShopsEnabled", plugin.getConfig().getBoolean("player-shops.enabled", true));
+        config.put("maxListingsPerPlayer", plugin.getConfig().getInt("player-shops.max-listings-per-player", 27));
+
+        // Webserver
+        config.put("webserverEnabled", plugin.getConfig().getBoolean("webserver.enabled", false));
+        config.put("webserverPort", plugin.getConfig().getInt("webserver.port", 7713));
+        config.put("webserverBind", plugin.getConfig().getString("webserver.bind", "0.0.0.0"));
+        config.put("webserverCorsEnabled", plugin.getConfig().getBoolean("webserver.cors.enabled", true));
+        config.put("webserverForceUpdate", plugin.getConfig().getBoolean("webserver.force-update-files", false));
+        config.put("webserverAdminEnabled", plugin.getConfig().getBoolean("webserver.admin-enabled", true));
+        config.put("webserverHostname", plugin.getConfig().getString("webserver.hostname", ""));
+
+        // Restock
+        config.put("restockEnabled", plugin.getConfig().getBoolean("restock.enabled", false));
+
+        // Cross-server
+        config.put("crossServerEnabled", plugin.getConfig().getBoolean("cross-server.enabled", false));
+        config.put("crossServerPort", plugin.getConfig().getInt("cross-server.port", 5556));
+        config.put("crossServerSaveInterval", plugin.getConfig().getInt("cross-server.save-interval-seconds", 600));
+
+        ctx.json(config);
+    }
+
+    /**
+     * POST /api/admin/config
+     * Update config values. Accepts JSON body with any config fields.
+     */
+    private void handleAdminConfigUpdate(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+
+        Map<String, Object> body;
+        try {
+            body = ctx.bodyAsClass(Map.class);
+        } catch (Exception e) {
+            ctx.status(400).json(Map.of("error", "Invalid JSON body"));
+            return;
+        }
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (body.containsKey("dynamicPricingEnabled")) {
+                boolean val = (Boolean) body.get("dynamicPricingEnabled");
+                plugin.getConfig().set("dynamic-pricing.enabled", val);
+                ConfigCacheManager.dynamicPricingEnabled = val;
+            }
+            if (body.containsKey("useStockCurve")) {
+                boolean val = (Boolean) body.get("useStockCurve");
+                plugin.getConfig().set("dynamic-pricing.use-stock-curve", val);
+                ConfigCacheManager.useStockCurve = val;
+            }
+            if (body.containsKey("curveStrength")) {
+                double val = ((Number) body.get("curveStrength")).doubleValue();
+                plugin.getConfig().set("dynamic-pricing.curve-strength", val);
+                ConfigCacheManager.curveStrength = val;
+            }
+            if (body.containsKey("maxStock")) {
+                double val = ((Number) body.get("maxStock")).doubleValue();
+                plugin.getConfig().set("dynamic-pricing.max-stock", val);
+                ConfigCacheManager.maxStock = val;
+            }
+            if (body.containsKey("minPriceMultiplier")) {
+                double val = ((Number) body.get("minPriceMultiplier")).doubleValue();
+                plugin.getConfig().set("dynamic-pricing.min-price-multiplier", val);
+                ConfigCacheManager.minPriceMultiplier = val;
+            }
+            if (body.containsKey("maxPriceMultiplier")) {
+                double val = ((Number) body.get("maxPriceMultiplier")).doubleValue();
+                plugin.getConfig().set("dynamic-pricing.max-price-multiplier", val);
+                ConfigCacheManager.maxPriceMultiplier = val;
+            }
+            if (body.containsKey("negativeStockPercentPerItem")) {
+                double val = ((Number) body.get("negativeStockPercentPerItem")).doubleValue();
+                plugin.getConfig().set("dynamic-pricing.negative-stock-percent-per-item", val);
+                ConfigCacheManager.negativeStockPercentPerItem = val;
+            }
+            if (body.containsKey("useTimeInflation")) {
+                boolean val = (Boolean) body.get("useTimeInflation");
+                plugin.getConfig().set("dynamic-pricing.use-time-inflation", val);
+                ConfigCacheManager.useTimeInflation = val;
+            }
+            if (body.containsKey("hourlyIncreasePercent")) {
+                double val = ((Number) body.get("hourlyIncreasePercent")).doubleValue();
+                plugin.getConfig().set("dynamic-pricing.hourly-increase-percent", val);
+                ConfigCacheManager.hourlyIncreasePercent = val;
+            }
+            if (body.containsKey("shortageDecayPercentPerHour")) {
+                double val = ((Number) body.get("shortageDecayPercentPerHour")).doubleValue();
+                plugin.getConfig().set("dynamic-pricing.shortage-decay-percent-per-hour", val);
+                ConfigCacheManager.shortageDecayPercentPerHour = val;
+            }
+            if (body.containsKey("restrictBuyingAtZeroStock")) {
+                boolean val = (Boolean) body.get("restrictBuyingAtZeroStock");
+                plugin.getConfig().set("dynamic-pricing.restrict-buying-at-zero-stock", val);
+                ConfigCacheManager.restrictBuyingAtZeroStock = val;
+            }
+            if (body.containsKey("sellTaxPercent")) {
+                double val = ((Number) body.get("sellTaxPercent")).doubleValue();
+                plugin.getConfig().set("economy.sell_tax_percent", val);
+                ConfigCacheManager.sellTaxPercent = val / 100.0;
+            }
+            if (body.containsKey("logDynamicPricing")) {
+                boolean val = (Boolean) body.get("logDynamicPricing");
+                plugin.getConfig().set("dynamic-pricing.log-dynamic-pricing", val);
+            }
+
+            // Economy
+            if (body.containsKey("transactionCooldownMs")) {
+                int val = ((Number) body.get("transactionCooldownMs")).intValue();
+                plugin.getConfig().set("economy.transaction_cooldown_ms", val);
+            }
+
+            // GUI
+            if (body.containsKey("shopMenuSize")) {
+                int val = ((Number) body.get("shopMenuSize")).intValue();
+                plugin.getConfig().set("gui.shop_menu_size", val);
+            }
+
+            // Logging
+            if (body.containsKey("maxRecentTransactions")) {
+                int val = ((Number) body.get("maxRecentTransactions")).intValue();
+                plugin.getConfig().set("logging.max_recent_transactions", val);
+            }
+
+            // Player Shops
+            if (body.containsKey("playerShopsEnabled")) {
+                boolean val = (Boolean) body.get("playerShopsEnabled");
+                plugin.getConfig().set("player-shops.enabled", val);
+            }
+            if (body.containsKey("maxListingsPerPlayer")) {
+                int val = ((Number) body.get("maxListingsPerPlayer")).intValue();
+                plugin.getConfig().set("player-shops.max-listings-per-player", val);
+            }
+
+            // Webserver
+            if (body.containsKey("webserverPort")) {
+                int val = ((Number) body.get("webserverPort")).intValue();
+                plugin.getConfig().set("webserver.port", val);
+            }
+            if (body.containsKey("webserverBind")) {
+                String val = (String) body.get("webserverBind");
+                plugin.getConfig().set("webserver.bind", val);
+            }
+            if (body.containsKey("webserverCorsEnabled")) {
+                boolean val = (Boolean) body.get("webserverCorsEnabled");
+                plugin.getConfig().set("webserver.cors.enabled", val);
+            }
+            if (body.containsKey("webserverForceUpdate")) {
+                boolean val = (Boolean) body.get("webserverForceUpdate");
+                plugin.getConfig().set("webserver.force-update-files", val);
+            }
+            if (body.containsKey("webserverAdminEnabled")) {
+                boolean val = (Boolean) body.get("webserverAdminEnabled");
+                plugin.getConfig().set("webserver.admin-enabled", val);
+            }
+            if (body.containsKey("webserverHostname")) {
+                String val = (String) body.get("webserverHostname");
+                plugin.getConfig().set("webserver.hostname", val);
+            }
+
+            // Restock
+            if (body.containsKey("restockEnabled")) {
+                boolean val = (Boolean) body.get("restockEnabled");
+                plugin.getConfig().set("restock.enabled", val);
+            }
+
+            // Cross-server
+            if (body.containsKey("crossServerEnabled")) {
+                plugin.getConfig().set("cross-server.enabled", (Boolean) body.get("crossServerEnabled"));
+            }
+            if (body.containsKey("crossServerPort")) {
+                plugin.getConfig().set("cross-server.port", ((Number) body.get("crossServerPort")).intValue());
+            }
+            if (body.containsKey("crossServerSaveInterval")) {
+                plugin.getConfig().set("cross-server.save-interval-seconds", ((Number) body.get("crossServerSaveInterval")).intValue());
+            }
+            if (body.containsKey("webserverEnabled")) {
+                plugin.getConfig().set("webserver.enabled", (Boolean) body.get("webserverEnabled"));
+            }
+            plugin.saveConfig();
+        });
+
+        // Audit log
+        StringBuilder changes = new StringBuilder();
+        body.forEach((k, v) -> changes.append(k).append("=").append(v).append(", "));
+        auditLog.log(getAdminUsername(ctx), "config_update", "global", changes.toString());
+
+        ctx.json(Map.of("success", true));
+    }
+
+    /**
+     * POST /api/admin/resetshortage
+     * Reset shortage data for all items
+     */
+    private void handleAdminResetShortage(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            ShopDataManager.resetAllShortageData();
+        });
+        auditLog.log(getAdminUsername(ctx), "shortage_reset", "ALL", "All shortage data reset");
+        ctx.json(Map.of("success", true, "message", "All shortage data reset"));
+    }
+
+    /**
+     * POST /api/admin/resetshortage/{item}
+     * Reset shortage data for a specific item
+     */
+    private void handleAdminResetShortageItem(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+
+        Material mat = Material.matchMaterial(ctx.pathParam("item"));
+        if (mat == null) {
+            ctx.status(404).json(Map.of("error", "Item not found"));
+            return;
+        }
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            ShopDataManager.setHoursInShortage(mat, 0.0);
+            ShopDataManager.setLastUpdate(mat, System.currentTimeMillis());
+            ShopDataManager.saveDynamicData();
+        });
+
+        auditLog.log(getAdminUsername(ctx), "shortage_reset", mat.name(), "Shortage hours reset to 0");
+        ctx.json(Map.of("success", true, "item", mat.name()));
+    }
+
+    /**
+     * GET /api/admin/audit
+     * Returns the admin audit log (newest first, max 200 entries)
+     */
+    private void handleAdminAudit(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+        String limitStr = ctx.queryParam("limit");
+        int limit = 200;
+        if (limitStr != null) {
+            try { limit = Math.min(Integer.parseInt(limitStr), 500); } catch (NumberFormatException ignored) {}
+        }
+        ctx.json(auditLog.getEntriesAsJson(limit));
+    }
+
+    /**
+     * GET /api/admin/categories
+     * Returns all categories with full metadata (icon, slot, hidden, item count, etc.)
+     */
+    private void handleAdminCategories(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+
+        List<Map<String, Object>> categories = new ArrayList<>();
+
+        for (ItemCategory cat : ItemCategory.values()) {
+            int slot = CategoryConfigManager.getSlot(cat);
+            Material icon = CategoryConfigManager.getIcon(cat);
+            String displayName = CategoryConfigManager.getDisplayName(cat);
+            boolean hidden = (slot == -1);
+
+            // Count items in this category
+            long itemCount = ShopDataManager.getAllTrackedMaterials().stream()
+                    .filter(mat -> ShopDataManager.getBasePrice(mat) >= 0)
+                    .filter(mat -> ShopDataManager.detectCategory(mat) == cat)
+                    .count();
+
+            // Count items with shortage
+            long shortageCount = ShopDataManager.getAllTrackedMaterials().stream()
+                    .filter(mat -> ShopDataManager.getBasePrice(mat) >= 0)
+                    .filter(mat -> ShopDataManager.detectCategory(mat) == cat)
+                    .filter(mat -> ShopDataManager.getHoursInShortage(mat) > 0)
+                    .count();
+
+            // Count items out of stock
+            long outOfStockCount = ShopDataManager.getAllTrackedMaterials().stream()
+                    .filter(mat -> ShopDataManager.getBasePrice(mat) >= 0)
+                    .filter(mat -> ShopDataManager.detectCategory(mat) == cat)
+                    .filter(mat -> ShopDataManager.getStock(mat) <= 0)
+                    .count();
+
+            String iconUrl = "https://mc.nerothe.com/img/1.21/minecraft_" + icon.name().toLowerCase() + ".png";
+
+            Map<String, Object> catMap = new LinkedHashMap<>();
+            catMap.put("id", cat.name());
+            catMap.put("displayName", displayName);
+            catMap.put("icon", icon.name());
+            catMap.put("iconUrl", iconUrl);
+            catMap.put("slot", slot);
+            catMap.put("hidden", hidden);
+            catMap.put("isCustom", cat.isCustomCategory());
+            catMap.put("itemCount", itemCount);
+            catMap.put("shortageCount", shortageCount);
+            catMap.put("outOfStockCount", outOfStockCount);
+
+            int[] restockRule = plugin.getRestockManager().getRuleForCategory(cat);
+            if (restockRule != null) {
+                catMap.put("restockTarget", restockRule[0]);
+                catMap.put("restockInterval", restockRule[1]);
+            } else {
+                catMap.put("restockTarget", null);
+                catMap.put("restockInterval", null);
+            }
+
+            categories.add(catMap);
+        }
+
+        ctx.json(categories);
+    }
+
+    /**
+     * POST /api/admin/category/{category}
+     */
+    private void handleAdminCategoryUpdate(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+        String idName = ctx.pathParam("category");
+        ItemCategory cat;
+        try {
+            cat = ItemCategory.valueOf(idName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            ctx.status(404).json(Map.of("error", "Category not found"));
+            return;
+        }
+
+        Map<String, Object> body;
+        try {
+            body = ctx.bodyAsClass(Map.class);
+        } catch (Exception e) {
+            ctx.status(400).json(Map.of("error", "Invalid JSON body"));
+            return;
+        }
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            boolean categoryChanged = false;
+            
+            if (body.containsKey("slot")) {
+                CategoryConfigManager.setSlot(cat, ((Number) body.get("slot")).intValue());
+                categoryChanged = true;
+            }
+            if (body.containsKey("icon")) {
+                String iconName = (String) body.get("icon");
+                if (iconName == null || iconName.isEmpty() || iconName.equalsIgnoreCase("DEFAULT")) {
+                    CategoryConfigManager.removeIcon(cat);
+                } else {
+                    try {
+                        CategoryConfigManager.setIcon(cat, Material.valueOf(iconName.toUpperCase()));
+                    } catch (Exception ignored) {}
+                }
+                categoryChanged = true;
+            }
+            if (body.containsKey("displayName")) {
+                String displayName = (String) body.get("displayName");
+                if (displayName == null || displayName.isEmpty() || displayName.equals(cat.getDisplayName())) {
+                    CategoryConfigManager.removeDisplayName(cat);
+                } else {
+                    CategoryConfigManager.setDisplayName(cat, displayName);
+                }
+                categoryChanged = true;
+            }
+
+            if (categoryChanged) {
+                CategoryConfigManager.save();
+            }
+
+            if (body.containsKey("restockTarget") && body.containsKey("restockInterval")) {
+                Object tgtObj = body.get("restockTarget");
+                Object intObj = body.get("restockInterval");
+                if (tgtObj == null || intObj == null) {
+                    plugin.getRestockManager().removeRuleForCategory(cat);
+                } else {
+                    int target = ((Number) tgtObj).intValue();
+                    int interval = ((Number) intObj).intValue();
+                    if (target > 0 && interval > 0) {
+                        plugin.getRestockManager().setRuleForCategory(cat, target, interval);
+                    } else {
+                        plugin.getRestockManager().removeRuleForCategory(cat);
+                    }
+                }
+            }
+            
+            auditLog.log(getAdminUsername(ctx), "category_update", cat.name(), "Updated category layout/restock rules");
+        });
+
+        ctx.json(Map.of("success", true));
+    }
+
+    /**
+     * Build the admin data map for a single material.
+     */
+    private Map<String, Object> buildAdminItemMap(Material mat) {
+        double basePrice = ShopDataManager.getBasePrice(mat);
+        double stock = ShopDataManager.getStock(mat);
+        double buyPrice = ShopDataManager.getPrice(mat);
+        double sellPrice = ShopDataManager.getSellPrice(mat);
+        ItemCategory category = ShopDataManager.detectCategory(mat);
+        double shortageHours = ShopDataManager.getHoursInShortage(mat);
+        double stockRate = ShopDataManager.getStockRate(mat);
+
+        // Calculate price increase %
+        double hourlyRate = ConfigCacheManager.hourlyIncreasePercent / 100.0;
+        double multiplier = Math.pow(1.0 + hourlyRate, shortageHours);
+        double percentIncrease = (multiplier - 1.0) * 100.0;
+        double maxPercent = (ConfigCacheManager.maxPriceMultiplier - 1.0) * 100.0;
+        if (percentIncrease > maxPercent) percentIncrease = maxPercent;
+
+        String imageUrl = "https://mc.nerothe.com/img/1.21/minecraft_" + mat.name().toLowerCase() + ".png";
+
+        // Fetch max limits directly from record if available, else retrieve from global defaults
+        Double maxStockConfig = null;
+        Integer maxStockStorageConfig = null;
+        try {
+            var itemConfig = ShopDataManager.itemConfigs.get(mat);
+            if (itemConfig != null) {
+                maxStockConfig = itemConfig.maxStock();
+                maxStockStorageConfig = itemConfig.maxStockStorage();
+            }
+        } catch (Exception ignored) {}
+
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("item", mat.name());
+        item.put("displayName", prettifyItemName(mat.name()));
+        item.put("category", category.name());
+        item.put("basePrice", basePrice);
+        item.put("buyPrice", buyPrice);
+        item.put("sellPrice", sellPrice);
+        item.put("stock", stock);
+        item.put("stockRate", stockRate);
+        item.put("maxStock", maxStockConfig);
+        item.put("maxStockStorage", maxStockStorageConfig);
+        item.put("shortageHours", shortageHours);
+        item.put("priceIncreasePercent", percentIncrease);
+        item.put("buyDisabled", ShopDataManager.isBuyDisabled(mat));
+        item.put("sellDisabled", ShopDataManager.isSellDisabled(mat));
+        item.put("disabled", ShopDataManager.isItemDisabled(mat));
+        item.put("imageUrl", imageUrl);
+        return item;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // UTILITY METHODS
     // ═══════════════════════════════════════════════════════════════
+
 
     private int parseLimit(String s, int def) {
         try {

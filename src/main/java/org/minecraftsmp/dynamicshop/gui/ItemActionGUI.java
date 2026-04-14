@@ -124,6 +124,23 @@ public class ItemActionGUI {
             lore.add("§7Sell: §c" + plugin.getEconomyManager().format(sellPrice));
             if (stock <= 0) {
                 lore.add("§7Stock: §c" + String.format("%.0f", stock));
+                
+                // Show price increase if out of stock
+                double hours = ShopDataManager.getHoursInShortage(targetItem);
+                double hourlyRate = org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.hourlyIncreasePercent / 100.0;
+                double multiplier = Math.pow(1.0 + hourlyRate, hours);
+                double percentIncrease = (multiplier - 1.0) * 100.0;
+                double maxPercent = (org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.maxPriceMultiplier - 1.0) * 100.0;
+                boolean capped = percentIncrease >= maxPercent;
+                if (capped) percentIncrease = maxPercent;
+
+                java.util.Map<String, String> percentPlaceholders = new java.util.HashMap<>();
+                percentPlaceholders.put("percent", String.format("%,.0f", percentIncrease) + (capped ? " (MAX)" : ""));
+                MessageManager.addLoreIfNotEmpty(lore,
+                        plugin.getMessageManager().getMessage("shop-lore-price-increase", percentPlaceholders));
+                MessageManager.addLoreIfNotEmpty(lore,
+                        plugin.getMessageManager().getMessage("shop-lore-price-increase-note"));
+
             } else {
                 lore.add("§7Stock: §a" + String.format("%.0f", stock));
             }
