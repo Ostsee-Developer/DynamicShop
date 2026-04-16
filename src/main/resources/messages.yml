@@ -36,6 +36,21 @@ messages:
   category-lore-click-to-browse: "&eClick to browse!"
   category-lore-no-items: "&cNo items available"
 
+  # GUI general messages
+  gui-category-title: "&8&lShop Categories"
+  gui-nav-previous: "&ePrevious Page"
+  gui-nav-previous-lore: "&7Click to go back"
+  gui-nav-previous-none: "&cNo previous page"
+  gui-nav-next: "&eNext Page"
+  gui-nav-next-lore: "&7Click to go forward"
+  gui-nav-next-none: "&cNo next page"
+  gui-nav-back: "&c&lBack to Categories"
+  gui-nav-back-lore: "&7Return to category selection"
+  gui-nav-search: "&b&lSearch Items"
+  gui-nav-search-lore: "&7Open search menu"
+  gui-nav-page: "&ePage &f{page} &7/ &f{max}"
+  gui-nav-page-lore: "&7Total items: &e{total}"
+
   # Search messages
   search-no-results: "&cNo items found matching your search."
   search-gui-title: "&8Search Results: &f{count}"

@@ -31,8 +31,12 @@ public class CategorySelectionGUI {
     public CategorySelectionGUI(DynamicShop plugin, Player player) {
         this.plugin = plugin;
         this.player = player;
+        
+        String title = plugin.getMessageManager().getMessage("gui-category-title");
+        if (title == null) title = "§8§lShop Categories";
+        
         this.inv = Bukkit.createInventory(null, SIZE,
-                LegacyComponentSerializer.legacySection().deserialize("§8§lShop Categories"));
+                LegacyComponentSerializer.legacySection().deserialize(title));
     }
 
     public void open() {
