@@ -50,6 +50,10 @@ messages:
   gui-nav-search-lore: "&7Open search menu"
   gui-nav-page: "&ePage &f{page} &7/ &f{max}"
   gui-nav-page-lore: "&7Total items: &e{total}"
+  gui-nav-filter: "&6Filter Options"
+  gui-nav-filter-hidden: "&aCurrently: &fHiding Out of Stock"
+  gui-nav-filter-shown: "&cCurrently: &fShowing All"
+  gui-nav-filter-lore: "&7Click to toggle"
 
   # Search messages
   search-no-results: "&cNo items found matching your search."
