@@ -548,6 +548,10 @@ public class WebServer {
         ctx.json(items);
     }
 
+    public synchronized void invalidateShopItemsCache() {
+        this.cacheTimestamp = 0;
+    }
+
     /**
      * Refreshes the shop items cache
      */
@@ -901,7 +905,13 @@ public class WebServer {
 
         // Apply changes on main thread for thread safety
         Bukkit.getScheduler().runTask(plugin, () -> {
-            if (body.containsKey("basePrice")) {
+            boolean isDisabled = false;
+            if (body.containsKey("disabled")) {
+                isDisabled = (Boolean) body.get("disabled");
+                ShopDataManager.setItemDisabled(mat, isDisabled);
+            }
+
+            if (!isDisabled && body.containsKey("basePrice")) {
                 double price = ((Number) body.get("basePrice")).doubleValue();
                 ShopDataManager.setBasePrice(mat, price);
             }
@@ -924,9 +934,6 @@ public class WebServer {
             if (body.containsKey("sellDisabled")) {
                 ShopDataManager.setSellDisabled(mat, (Boolean) body.get("sellDisabled"));
             }
-            if (body.containsKey("disabled")) {
-                ShopDataManager.setItemDisabled(mat, (Boolean) body.get("disabled"));
-            }
             if (body.containsKey("maxStock")) {
                 Object maxStockObj = body.get("maxStock");
                 Double maxStock = maxStockObj == null ? null : ((Number) maxStockObj).doubleValue();
@@ -945,6 +952,7 @@ public class WebServer {
             }
 
             ShopDataManager.saveDynamicData();
+            invalidateShopItemsCache();
         });
 
         // Audit log
@@ -1165,6 +1173,7 @@ public class WebServer {
                 plugin.getConfig().set("webserver.enabled", (Boolean) body.get("webserverEnabled"));
             }
             plugin.saveConfig();
+            invalidateShopItemsCache();
         });
 
         // Audit log
