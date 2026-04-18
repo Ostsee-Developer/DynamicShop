@@ -57,6 +57,7 @@ public class ShopDataManager {
     private static YamlConfiguration shopDataConfig;
 
     public static BukkitRunnable saveTimer;
+    private static BukkitRunnable shortageTicker;
 
     // ------------------------------------------------------------------------
     // INIT
@@ -92,12 +93,16 @@ public class ShopDataManager {
         // Periodic shortage tick — bakes shortage accumulation/decay every 5 minutes
         // so items at zero stock gain shortage even with no trades,
         // and items with supply lose shortage even with no trades.
-        new BukkitRunnable() {
+        if (shortageTicker != null && !shortageTicker.isCancelled()) {
+            shortageTicker.cancel();
+        }
+        shortageTicker = new BukkitRunnable() {
             @Override
             public void run() {
                 tickAllShortage();
             }
-        }.runTaskTimer(plugin, 6000L, 6000L); // 5 minutes = 6000 ticks
+        };
+        shortageTicker.runTaskTimer(plugin, 6000L, 6000L); // 5 minutes = 6000 ticks
     }
 
     public static void reload() {
