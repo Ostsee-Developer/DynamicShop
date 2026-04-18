@@ -116,6 +116,7 @@ public class WebServer {
                 app.get("/api/admin/items", this::handleAdminItems);
                 app.get("/api/admin/item/{item}", this::handleAdminItemDetail);
                 app.post("/api/admin/item/{item}", this::handleAdminItemUpdate);
+                app.post("/api/admin/items/bulk", this::handleAdminItemsBulkUpdate);
                 app.get("/api/admin/config", this::handleAdminConfigGet);
                 app.post("/api/admin/config", this::handleAdminConfigUpdate);
                 app.post("/api/admin/resetshortage", this::handleAdminResetShortage);
@@ -1105,6 +1106,56 @@ public class WebServer {
         auditLog.log(getAdminUsername(ctx), "item_update", mat.name(), changes.toString());
 
         ctx.json(Map.of("success", true, "item", mat.name()));
+    }
+
+    /**
+     * POST /api/admin/items/bulk
+     * Body: { items: ["MAT1", "MAT2"], updates: { buyDisabled: true, ... } }
+     */
+    private void handleAdminItemsBulkUpdate(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+
+        Map<String, Object> body;
+        try {
+            body = ctx.bodyAsClass(Map.class);
+        } catch (Exception e) {
+            ctx.status(400).json(Map.of("error", "Invalid JSON body"));
+            return;
+        }
+
+        List<String> items = (List<String>) body.get("items");
+        Map<String, Object> updates = (Map<String, Object>) body.get("updates");
+        if (items == null || updates == null || items.isEmpty()) {
+            ctx.status(400).json(Map.of("error", "Items and updates are required"));
+            return;
+        }
+
+        List<Material> materialsToUpdate = new ArrayList<>();
+        for (String itemName : items) {
+             Material mat = Material.matchMaterial(itemName);
+             if (mat != null && ShopDataManager.getBasePrice(mat) >= 0) {
+                 materialsToUpdate.add(mat);
+             }
+        }
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            for (Material mat : materialsToUpdate) {
+                if (updates.containsKey("disabled")) {
+                    ShopDataManager.setItemDisabled(mat, (Boolean) updates.get("disabled"));
+                }
+                if (updates.containsKey("buyDisabled")) {
+                    ShopDataManager.setBuyDisabled(mat, (Boolean) updates.get("buyDisabled"));
+                }
+                if (updates.containsKey("sellDisabled")) {
+                    ShopDataManager.setSellDisabled(mat, (Boolean) updates.get("sellDisabled"));
+                }
+            }
+            ShopDataManager.saveDynamicData();
+            invalidateShopItemsCache();
+        });
+
+        auditLog.log(getAdminUsername(ctx), "bulk_item_update", items.size() + " items", updates.toString());
+        ctx.json(Map.of("success", true, "updated", materialsToUpdate.size()));
     }
 
     /**

@@ -878,13 +878,29 @@
                 <div id="itemsView" style="display:none;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <div class="breadcrumb" id="breadcrumb"></div>
-                        <button class="btn btn-primary btn-sm" id="btnAddItem" onclick="openAddItemModal()" style="display:none;">✚ Add Item</button>
+                        <div style="display:flex;gap:8px;">
+                            <div id="bulkActionsWrapper" style="display:none;position:relative;">
+                                <button class="btn btn-ghost btn-sm" onclick="toggleBulkActions()">Bulk Actions ⏷</button>
+                                <div id="bulkActionsMenu" style="display:none;position:absolute;top:100%;right:0;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:8px;z-index:100;box-shadow:0 10px 30px rgba(0,0,0,0.5);width:160px;">
+                                    <button class="btn btn-ghost" style="width:100%;text-align:left;font-size:12px;margin-bottom:4px;display:flex;align-items:center;padding:6px 10px;" onclick="performBulkAction('disable_item')">❌ Disable Items</button>
+                                    <button class="btn btn-ghost" style="width:100%;text-align:left;font-size:12px;margin-bottom:4px;display:flex;align-items:center;padding:6px 10px;" onclick="performBulkAction('enable_item')">✓ Enable Items</button>
+                                    <hr style="border:none;border-top:1px solid var(--border);margin:4px 0;">
+                                    <button class="btn btn-ghost" style="width:100%;text-align:left;font-size:12px;margin-bottom:4px;display:flex;align-items:center;padding:6px 10px;" onclick="performBulkAction('disable_buy')">⛔ Disable Buying</button>
+                                    <button class="btn btn-ghost" style="width:100%;text-align:left;font-size:12px;margin-bottom:4px;display:flex;align-items:center;padding:6px 10px;" onclick="performBulkAction('enable_buy')">🟢 Enable Buying</button>
+                                    <hr style="border:none;border-top:1px solid var(--border);margin:4px 0;">
+                                    <button class="btn btn-ghost" style="width:100%;text-align:left;font-size:12px;margin-bottom:4px;display:flex;align-items:center;padding:6px 10px;" onclick="performBulkAction('disable_sell')">⛔ Disable Selling</button>
+                                    <button class="btn btn-ghost" style="width:100%;text-align:left;font-size:12px;display:flex;align-items:center;padding:6px 10px;" onclick="performBulkAction('enable_sell')">🟢 Enable Selling</button>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary btn-sm" id="btnAddItem" onclick="openAddItemModal()" style="display:none;">✚ Add Item</button>
+                        </div>
                     </div>
                     <div class="items-card">
                         <div class="items-scroll">
                             <table class="items-table">
                                 <thead>
                                     <tr>
+                                        <th style="width: 30px;"><input type="checkbox" id="selectAllItems" onclick="toggleAllItems()"></th>
                                         <th>Item</th>
                                         <th>Base</th>
                                         <th>Buy</th>
@@ -1397,8 +1413,11 @@
         // ─── Items Table ───
         function renderItems(items) {
             const tbody = document.getElementById('itemsBody');
-            if (!items.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No items</td></tr>'; return; }
+            document.getElementById('selectAllItems').checked = false;
+            updateBulkActionUI();
+            if (!items.length) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">No items</td></tr>'; return; }
             tbody.innerHTML = items.map(i => `<tr>
+        <td><input type="checkbox" class="item-select-chk" value="${i.item}" onchange="updateBulkActionUI()"></td>
         <td><div class="item-cell"><img src="${i.imageUrl}" onerror="this.style.display='none'"><div><div class="name">${i.displayName}</div><div class="id">${i.item}</div></div></div></td>
         <td>$${i.basePrice.toFixed(2)}</td>
         <td>$${i.buyPrice.toFixed(2)}</td>
@@ -1408,6 +1427,74 @@
         <td>${i.priceIncreasePercent > 0 ? '<span class="price-inc">+' + i.priceIncreasePercent.toFixed(0) + '%</span>' : '—'}</td>
         <td><button class="btn btn-ghost btn-sm" onclick="openEdit('${i.item}')">Edit</button></td>
     </tr>`).join('');
+        }
+
+        function toggleAllItems() {
+            const checked = document.getElementById('selectAllItems').checked;
+            document.querySelectorAll('.item-select-chk').forEach(c => c.checked = checked);
+            updateBulkActionUI();
+        }
+
+        function updateBulkActionUI() {
+            let chks = document.querySelectorAll('.item-select-chk');
+            if(chks.length === 0) {
+                document.getElementById('bulkActionsWrapper').style.display = 'none';
+                return;
+            }
+            const count = document.querySelectorAll('.item-select-chk:checked').length;
+            document.getElementById('bulkActionsWrapper').style.display = count > 0 ? 'inline-block' : 'none';
+            if (count < chks.length) { document.getElementById('selectAllItems').checked = false; }
+            else if (count > 0 && count === chks.length) { document.getElementById('selectAllItems').checked = true; }
+        }
+
+        function toggleBulkActions() {
+            const menu = document.getElementById('bulkActionsMenu');
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        }
+
+        document.addEventListener('click', function(e) {
+            const wrapper = document.getElementById('bulkActionsWrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                const menu = document.getElementById('bulkActionsMenu');
+                if(menu) menu.style.display = 'none';
+            }
+        });
+
+        async function performBulkAction(actionType) {
+            document.getElementById('bulkActionsMenu').style.display = 'none';
+            const selectedBoxes = Array.from(document.querySelectorAll('.item-select-chk:checked'));
+            const itemsToUpdate = selectedBoxes.map(c => c.value).filter(val => !val.startsWith('special:') && !val.startsWith('playershop:'));
+            if (itemsToUpdate.length === 0) {
+                toast('No standard items selected. Special/Player items cannot be bulk updated.', 'error');
+                return;
+            }
+            if (!confirm('Are you sure you want to apply this action to ' + itemsToUpdate.length + ' items?')) return;
+
+            const updates = {};
+            if (actionType === 'disable_item') updates.disabled = true;
+            if (actionType === 'enable_item') updates.disabled = false;
+            if (actionType === 'disable_buy') updates.buyDisabled = true;
+            if (actionType === 'enable_buy') updates.buyDisabled = false;
+            if (actionType === 'disable_sell') updates.sellDisabled = true;
+            if (actionType === 'enable_sell') updates.sellDisabled = false;
+
+            try {
+                const res = await apiFetch('/api/admin/items/bulk', {
+                    method: 'POST',
+                    body: JSON.stringify({ items: itemsToUpdate, updates: updates })
+                });
+                if (res.error) { toast(res.error, 'error'); } 
+                else {
+                    toast('Successfully updated ' + res.updated + ' items', 'success');
+                    allItems = await apiFetch('/api/admin/items');
+                    if (currentCategory) openCategory(currentCategory);
+                    else handleSearch();
+                    document.getElementById('selectAllItems').checked = false;
+                    updateBulkActionUI();
+                }
+            } catch (e) {
+                toast('Failed to perform bulk action', 'error');
+            }
         }
 
         // ─── Edit Modal ───
