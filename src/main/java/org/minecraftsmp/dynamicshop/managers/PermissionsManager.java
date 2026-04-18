@@ -50,25 +50,66 @@ public class PermissionsManager {
     // -------------------------------------------------------------
     // PERMISSION LOGIC
     // -------------------------------------------------------------
-    public boolean hasPermission(Player p, String permission) {
+    public boolean hasPermission(Player p, String permission, String world) {
         if (vaultPerms == null) return false;
-        return vaultPerms.playerHas(p, permission);
+        String w = (world != null && !world.isBlank()) ? world : null;
+        return vaultPerms.playerHas((String) w, p.getName(), permission);
     }
 
-    public boolean grantPermission(Player p, String permission) {
+    public boolean grantPermission(Player p, String permission, String world) {
         if (vaultPerms == null) return false;
+        String w = (world != null && !world.isBlank()) ? world : null;
 
         // Already owns it
-        if (vaultPerms.playerHas(p, permission)) {
+        if (vaultPerms.playerHas((String) w, p.getName(), permission)) {
             return false;
         }
 
         // Attempt grant
-        boolean result = vaultPerms.playerAdd(p, permission);
+        boolean result = vaultPerms.playerAdd((String) w, p.getName(), permission);
 
         if (!result) {
             Bukkit.getLogger().warning("[DynamicShop] Failed to grant permission '" +
-                    permission + "' to " + p.getName());
+                    permission + "' to " + p.getName() +
+                    (w != null ? " in world '" + w + "'" : " globally"));
+        }
+
+        return result;
+    }
+
+    // -------------------------------------------------------------
+    // GROUP LOGIC
+    // -------------------------------------------------------------
+
+    /**
+     * Returns true if the player is a member of the given Vault group.
+     * @param world null or blank = global (all worlds)
+     */
+    public boolean isInGroup(Player p, String group, String world) {
+        if (vaultPerms == null) return false;
+        String w = (world != null && !world.isBlank()) ? world : null;
+        return vaultPerms.playerInGroup((String) w, p.getName(), group);
+    }
+
+    /**
+     * Adds the player to the given Vault group.
+     * @param world null or blank = global (all worlds)
+     * Returns false if already in group or call fails.
+     */
+    public boolean grantGroup(Player p, String group, String world) {
+        if (vaultPerms == null) return false;
+        String w = (world != null && !world.isBlank()) ? world : null;
+
+        if (vaultPerms.playerInGroup((String) w, p.getName(), group)) {
+            return false; // already a member
+        }
+
+        boolean result = vaultPerms.playerAddGroup((String) w, p.getName(), group);
+
+        if (!result) {
+            Bukkit.getLogger().warning("[DynamicShop] Failed to add '" +
+                    p.getName() + "' to group '" + group +
+                    (w != null ? "' in world '" + w + "'" : "' globally"));
         }
 
         return result;

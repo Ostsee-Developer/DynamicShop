@@ -1,3 +1,4 @@
+<!-- DS-WEB-VERSION: ${project.version} -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -854,6 +855,7 @@
             <div class="nav-tab active" data-tab="shop">📦 Shop</div>
             <div class="nav-tab" data-tab="config">⚙️ Config</div>
             <div class="nav-tab" data-tab="actions">🔧 Actions</div>
+            <div class="nav-tab" data-tab="perms">🔑 Permissions</div>
             <div class="nav-tab" data-tab="audit">📋 Audit Log</div>
         </div>
 
@@ -874,7 +876,10 @@
                 </div>
                 <!-- Items view (shown when a category is selected or searching) -->
                 <div id="itemsView" style="display:none;">
-                    <div class="breadcrumb" id="breadcrumb"></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <div class="breadcrumb" id="breadcrumb"></div>
+                        <button class="btn btn-primary btn-sm" id="btnAddItem" onclick="openAddItemModal()" style="display:none;">✚ Add Item</button>
+                    </div>
                     <div class="items-card">
                         <div class="items-scroll">
                             <table class="items-table">
@@ -948,6 +953,38 @@
                         <div class="config-field" style="flex:1;"><label>Stock Amount</label><input type="number"
                                 id="bulkStockAmount" value="0" step="1"></div>
                         <button class="btn btn-primary" onclick="setBulkStock()">Set All Stock</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ Permissions Tab ═══ -->
+            <div class="tab-content" id="tab-perms">
+                <div class="card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                        <div>
+                            <h2 style="margin-bottom:4px;">🔑 Permission &amp; Group Shop</h2>
+                            <p style="color:var(--text-secondary);font-size:13px;">Players purchase these to receive a permission node or be added to a group via Vault.</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="openAddSpecialItem()">✚ Add Perm / Group</button>
+                    </div>
+                    <div class="items-card">
+                        <div class="items-scroll">
+                            <table class="items-table" id="specialItemsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Name</th>
+                                        <th>Value (perm/group)</th>
+                                        <th>Price</th>
+                                        <th>Gate Permission</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="specialItemsBody">
+                                    <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:32px;">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1041,6 +1078,88 @@
         </div>
     </div>
 
+
+    <!-- ═══ Add Item Modal ═══ -->
+    <div class="modal-overlay" id="addItemModal">
+        <div class="modal" style="width:480px;">
+            <h2>➕ Add Item to Shop</h2>
+            <div class="field-group">
+                <label>Material Name <span style="color:var(--text-muted);font-size:11px;">(e.g. DIAMOND or diamond)</span></label>
+                <input type="text" id="addItemMaterial" placeholder="DIAMOND" autocomplete="off" oninput="filterMaterialSuggestions()" style="text-transform:uppercase;">
+                <div id="materialSuggestions" style="background:var(--bg-input);border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:180px;overflow-y:auto;display:none;"></div>
+            </div>
+            <div class="field-group">
+                <label>Base Price</label>
+                <input type="number" id="addItemPrice" min="0.01" step="0.01" placeholder="100">
+            </div>
+            <div class="field-group">
+                <label>Category Override <span style="color:var(--text-muted);font-size:11px;">(optional — leave blank to auto-detect)</span></label>
+                <select id="addItemCategory" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text-primary);font-size:14px;font-family:inherit;">
+                    <option value="">Auto-detect</option>
+                </select>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="submitAddItem()">💾 Add to Shop</button>
+                <button class="btn btn-ghost" onclick="closeAddItemModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Special Items (Perm/Group/Command) Edit Modal ═══ -->
+    <div class="modal-overlay" id="editSpecialModal">
+        <div class="modal" style="width:520px;">
+            <h2 id="specialModalTitle">🔑 Add Permission / Group / Command</h2>
+            <div class="field-group">
+                <label>Type</label>
+                <select id="siType" onchange="onSiTypeChange()" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text-primary);font-size:14px;font-family:inherit;">
+                    <option value="perm">Permission Node</option>
+                    <option value="group">Permission Group</option>
+                    <option value="command">Run Command</option>
+                </select>
+            </div>
+            <div class="field-group" id="siNameRow" style="display:none;">
+                <label>Display Name <span style="color:var(--text-muted);font-size:11px;">(shown to players in the shop)</span></label>
+                <input type="text" id="siName" placeholder="Buy VIP Rank">
+            </div>
+            <div class="field-group" id="siPermRow">
+                <label>Permission Node <span style="color:var(--text-muted);font-size:11px;">(e.g. essentials.fly)</span></label>
+                <input type="text" id="siPermission" placeholder="permission.node">
+            </div>
+            <div class="field-group" id="siPermWorldRow">
+                <label>Permission World <span style="color:var(--text-muted);font-size:11px;">(optional — leave blank for global)</span></label>
+                <input type="text" id="siPermWorld" placeholder="survival_world">
+            </div>
+            <div class="field-group" id="siGroupRow" style="display:none;">
+                <label>Group Name <span style="color:var(--text-muted);font-size:11px;">(exact group name from your permissions plugin)</span></label>
+                <input type="text" id="siGroup" placeholder="vip">
+            </div>
+            <div class="field-group" id="siGroupWorldRow" style="display:none;">
+                <label>Group World <span style="color:var(--text-muted);font-size:11px;">(optional — leave blank for global)</span></label>
+                <input type="text" id="siGroupWorld" placeholder="survival_world">
+            </div>
+            <div class="field-group" id="siCommandRow" style="display:none;">
+                <label>Console Command <span style="color:var(--text-muted);font-size:11px;">(use <code style="background:var(--bg-input);padding:1px 5px;border-radius:4px;">{player}</code> as placeholder — no leading /)</span></label>
+                <input type="text" id="siCommand" placeholder="lp user {player} parent set vip">
+            </div>
+            <div class="field-group">
+                <label>Price</label>
+                <input type="number" id="siPrice" min="0" step="0.01" placeholder="5000">
+            </div>
+            <div class="field-group">
+                <label>Display Material <span style="color:var(--text-muted);font-size:11px;">(optional, e.g. EMERALD)</span></label>
+                <input type="text" id="siMaterial" placeholder="ENCHANTED_BOOK">
+            </div>
+            <div class="field-group">
+                <label>Required Permission <span style="color:var(--text-muted);font-size:11px;">(optional gate — player must already have this)</span></label>
+                <input type="text" id="siRequiredPerm" placeholder="leave blank for none">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="saveSpecialItem()">💾 Save</button>
+                <button class="btn btn-ghost" onclick="closeSpecialModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ─── State ───
         const params = new URLSearchParams(window.location.search);
@@ -1121,6 +1240,7 @@
             document.getElementById('app').style.display = 'block';
             loadCategories();
             loadConfig();
+            loadSpecialItems();
         }
 
         async function doRegister() {
@@ -1172,6 +1292,8 @@
                 document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+                if (tab.dataset.tab === 'perms') loadSpecialItems();
+                if (tab.dataset.tab === 'audit') loadAudit();
             });
         });
 
@@ -1228,6 +1350,7 @@
 
             document.getElementById('categoryView').style.display = 'none';
             document.getElementById('itemsView').style.display = 'block';
+            document.getElementById('btnAddItem').style.display = '';
             document.getElementById('breadcrumb').innerHTML = `
         <a onclick="backToCategories()">Categories</a>
         <span class="sep">›</span>
@@ -1238,6 +1361,7 @@
 
         function backToCategories() {
             document.getElementById('globalSearch').value = '';
+            document.getElementById('btnAddItem').style.display = 'none';
             renderCategories(allCategories);
         }
 
@@ -1287,7 +1411,28 @@
         }
 
         // ─── Edit Modal ───
+        async function deletePlayerShop(id) {
+            if (!confirm('Are you sure you want to delete this player shop listing?')) return;
+            try {
+                const res = await apiFetch(`/api/admin/playershop/${id}`, { method: 'DELETE' });
+                if (res.error) { toast(res.error, 'error'); return; }
+                toast('Deleted player shop listing', 'success');
+                allItems = await apiFetch('/api/admin/items');
+                if (currentCategory) openCategory(currentCategory);
+            } catch (e) {
+                toast('Failed to delete listing', 'error');
+            }
+        }
+
         function openEdit(itemName) {
+            if (itemName.startsWith('special:')) {
+                openEditSpecialItem(itemName.split(':')[1]);
+                return;
+            }
+            if (itemName.startsWith('playershop:')) {
+                deletePlayerShop(itemName.split(':')[1]);
+                return;
+            }
             const item = allItems.find(i => i.item === itemName);
             if (!item) return;
             editingItem = item;
@@ -1599,6 +1744,263 @@
         }
 
         init();
+
+        // ─── Special Items (Perm / Group Shop) ───
+        let allSpecialItems = [];
+        let editingSpecialId = null; // null = creating new
+
+        async function loadSpecialItems() {
+            try {
+                allSpecialItems = await apiFetch('/api/admin/special-items');
+                renderSpecialItems();
+            } catch(e) {
+                document.getElementById('specialItemsBody').innerHTML =
+                    '<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:32px;">Failed to load</td></tr>';
+            }
+        }
+
+        function renderSpecialItems() {
+            const tbody = document.getElementById('specialItemsBody');
+            if (!allSpecialItems || allSpecialItems.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:40px;">No permission or group shop items yet. Click ✚ Add to create one.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = allSpecialItems.map(item => {
+                const isGroup = item.type === 'group';
+                const typeBadge = isGroup
+                    ? `<span style="background:rgba(6,182,212,0.15);color:#06b6d4;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">GROUP</span>`
+                    : `<span style="background:rgba(99,102,241,0.15);color:#818cf8;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">PERM</span>`;
+                const value = isGroup ? (item.group || '—') : (item.permission || '—');
+                const gate = item.requiredPermission
+                    ? `<code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;font-size:11px;">${item.requiredPermission}</code>`
+                    : '<span style="color:var(--text-muted)">—</span>';
+                const matImg = `https://mc.nerothe.com/img/1.21/minecraft_${(item.displayMaterial||'enchanted_book').toLowerCase()}.png`;
+                return `<tr>
+                    <td>${typeBadge}</td>
+                    <td>
+                        <div class="item-cell">
+                            <img src="${matImg}" onerror="this.style.display='none'">
+                            <div>
+                                <div class="name">${escHtml(item.name||item.id)}</div>
+                                <div class="id">${escHtml(item.id)}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td><code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;font-size:12px;">${escHtml(value)}</code></td>
+                    <td style="font-weight:600;color:var(--success);">${formatPrice(item.price)}</td>
+                    <td>${gate}</td>
+                    <td style="white-space:nowrap;">
+                        <button class="btn btn-ghost btn-sm" onclick="openEditSpecialItem('${item.id}')" style="margin-right:4px;">✏️ Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteSpecialItem('${item.id}')">🗑️</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function formatPrice(p) {
+            if (p == null) return '—';
+            return Number(p).toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:2});
+        }
+
+        function onSiTypeChange() {
+            const type = document.getElementById('siType').value;
+            document.getElementById('siPermRow').style.display    = type === 'perm'    ? '' : 'none';
+            document.getElementById('siPermWorldRow').style.display = type === 'perm' ? '' : 'none';
+            document.getElementById('siGroupRow').style.display   = type === 'group'   ? '' : 'none';
+            document.getElementById('siGroupWorldRow').style.display = type === 'group' ? '' : 'none';
+            document.getElementById('siCommandRow').style.display = type === 'command' ? '' : 'none';
+            document.getElementById('siNameRow').style.display    = type === 'command' ? '' : 'none';
+        }
+
+        function openAddSpecialItem() {
+            editingSpecialId = null;
+            document.getElementById('specialModalTitle').textContent = '🔑 Add Permission / Group / Command';
+            document.getElementById('siType').value = 'perm';
+            document.getElementById('siType').disabled = false;
+            document.getElementById('siPermission').value = '';
+            document.getElementById('siPermWorld').value = '';
+            document.getElementById('siGroup').value = '';
+            document.getElementById('siGroupWorld').value = '';
+            document.getElementById('siCommand').value = '';
+            document.getElementById('siName').value = '';
+            document.getElementById('siPrice').value = '';
+            document.getElementById('siMaterial').value = '';
+            document.getElementById('siRequiredPerm').value = '';
+            onSiTypeChange();
+            document.getElementById('editSpecialModal').classList.add('active');
+        }
+
+        function openEditSpecialItem(id) {
+            const item = allSpecialItems.find(i => i.id === id);
+            if (!item) return;
+            editingSpecialId = id;
+            document.getElementById('specialModalTitle').textContent = '✏️ Edit ' + (item.name || id);
+            document.getElementById('siType').value = item.type || 'perm';
+            document.getElementById('siType').disabled = true; // can't change type of existing item
+            document.getElementById('siPermission').value = item.permission || '';
+            document.getElementById('siPermWorld').value = item.permissionWorld || '';
+            document.getElementById('siGroup').value = item.group || '';
+            document.getElementById('siGroupWorld').value = item.groupWorld || '';
+            document.getElementById('siCommand').value = item.command || '';
+            document.getElementById('siName').value = item.name || '';
+            document.getElementById('siPrice').value = item.price ?? '';
+            document.getElementById('siMaterial').value = item.displayMaterial || '';
+            document.getElementById('siRequiredPerm').value = item.requiredPermission || '';
+            onSiTypeChange();
+            document.getElementById('editSpecialModal').classList.add('active');
+        }
+
+        function closeSpecialModal() {
+            document.getElementById('editSpecialModal').classList.remove('active');
+            document.getElementById('siType').disabled = false;
+        }
+
+        async function saveSpecialItem() {
+            const type = document.getElementById('siType').value;
+            const price = parseFloat(document.getElementById('siPrice').value);
+            const material = document.getElementById('siMaterial').value.trim().toUpperCase() || null;
+            const requiredPerm = document.getElementById('siRequiredPerm').value.trim() || null;
+
+            if (isNaN(price) || price < 0) { toast('Price must be a non-negative number', 'error'); return; }
+
+            let body = { price, requiredPermission: requiredPerm };
+            if (material) body.displayMaterial = material;
+
+            if (editingSpecialId) {
+                // UPDATE existing
+                try {
+                    const res = await apiFetch('/api/admin/special-items/' + editingSpecialId, {
+                        method: 'POST', body: JSON.stringify(body)
+                    });
+                    if (res.error) { toast(res.error, 'error'); return; }
+                    toast('Saved!', 'success');
+                    closeSpecialModal();
+                    loadSpecialItems();
+                } catch(e) { toast('Failed to save', 'error'); }
+            } else {
+                // CREATE new
+                if (type === 'perm') {
+                    const perm = document.getElementById('siPermission').value.trim();
+                    const permWorld = document.getElementById('siPermWorld').value.trim();
+                    if (!perm) { toast('Permission node is required', 'error'); return; }
+                    body.type = 'perm';
+                    body.permission = perm;
+                    if (permWorld) body.permissionWorld = permWorld;
+                } else if (type === 'command') {
+                    const cmd = document.getElementById('siCommand').value.trim();
+                    const name = document.getElementById('siName').value.trim();
+                    if (!cmd) { toast('Console command is required', 'error'); return; }
+                    if (!name) { toast('Display name is required', 'error'); return; }
+                    body.type = 'command';
+                    body.command = cmd;
+                    body.name = name;
+                } else {
+                    const group = document.getElementById('siGroup').value.trim();
+                    const groupWorld = document.getElementById('siGroupWorld').value.trim();
+                    if (!group) { toast('Group name is required', 'error'); return; }
+                    body.type = 'group';
+                    body.group = group;
+                    if (groupWorld) body.groupWorld = groupWorld;
+                }
+                try {
+                    const res = await apiFetch('/api/admin/special-items', {
+                        method: 'POST', body: JSON.stringify(body)
+                    });
+                    if (res.error) { toast(res.error, 'error'); return; }
+                    toast('Created!', 'success');
+                    closeSpecialModal();
+                    // Give server a tick to write config then reload
+                    setTimeout(loadSpecialItems, 400);
+                } catch(e) { toast('Failed to create', 'error'); }
+            }
+        }
+
+        async function deleteSpecialItem(id) {
+            if (!confirm('Delete this item? Players will no longer be able to buy it.')) return;
+            try {
+                const res = await apiFetch('/api/admin/special-items/' + id, { method: 'DELETE' });
+                if (res.error) { toast(res.error, 'error'); return; }
+                toast('Deleted', 'success');
+                loadSpecialItems();
+            } catch(e) { toast('Failed to delete', 'error'); }
+        }
+
+        // ─── Add Item to Category ───
+        function openAddItemModal() {
+            if (currentCategory === 'PERMISSIONS' || currentCategory === 'SERVER_SHOP') {
+                openAddSpecialItem();
+                return;
+            }
+            if (currentCategory === 'PLAYER_SHOPS') {
+                toast('Player shop listings can only be created by players in-game.', 'info');
+                return;
+            }
+            const sel = document.getElementById('addItemCategory');
+            sel.innerHTML = '<option value="">Auto-detect</option>';
+            allCategories.forEach(c => {
+                if (c.id === 'PERMISSIONS' || c.id === 'SERVER_SHOP') return;
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.displayName + ' (' + c.id + ')';
+                if (currentCategory && currentCategory === c.id) opt.selected = true;
+                sel.appendChild(opt);
+            });
+            document.getElementById('addItemMaterial').value = '';
+            document.getElementById('addItemPrice').value = '';
+            document.getElementById('materialSuggestions').style.display = 'none';
+            document.getElementById('addItemModal').classList.add('active');
+            setTimeout(() => document.getElementById('addItemMaterial').focus(), 100);
+        }
+
+        function closeAddItemModal() {
+            document.getElementById('addItemModal').classList.remove('active');
+            document.getElementById('materialSuggestions').style.display = 'none';
+        }
+
+        function filterMaterialSuggestions() {
+            const input = document.getElementById('addItemMaterial').value.trim().toUpperCase();
+            const box = document.getElementById('materialSuggestions');
+            if (!input || input.length < 2) { box.style.display = 'none'; return; }
+            const allMats = [...new Set(allItems.map(i => i.item))]
+                .filter(m => m.includes(input)).sort().slice(0, 20);
+            if (allMats.length === 0) { box.style.display = 'none'; return; }
+            box.style.display = 'block';
+            box.innerHTML = allMats.map(m =>
+                `<div style="padding:8px 14px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:10px;"
+                     onmouseover="this.style.background='var(--bg-card-hover)'" onmouseout="this.style.background=''"
+                     onclick="selectMaterial('${m}')">
+                    <img src="https://mc.nerothe.com/img/1.21/minecraft_${m.toLowerCase()}.png"
+                         style="width:22px;height:22px;image-rendering:pixelated;" onerror="this.style.display='none'">
+                    ${m}</div>`).join('');
+        }
+
+        function selectMaterial(mat) {
+            document.getElementById('addItemMaterial').value = mat;
+            document.getElementById('materialSuggestions').style.display = 'none';
+        }
+
+        async function submitAddItem() {
+            const material = document.getElementById('addItemMaterial').value.trim().toUpperCase();
+            const price = parseFloat(document.getElementById('addItemPrice').value);
+            const category = document.getElementById('addItemCategory').value || null;
+            if (!material) { toast('Material name is required', 'error'); return; }
+            if (isNaN(price) || price <= 0) { toast('Price must be > 0', 'error'); return; }
+            const body = { material, basePrice: price };
+            if (category) body.category = category;
+            try {
+                const res = await apiFetch('/api/admin/items/create', { method: 'POST', body: JSON.stringify(body) });
+                if (res.error) { toast(res.error, 'error'); return; }
+                toast('✓ Added ' + material + ' to shop!', 'success');
+                closeAddItemModal();
+                allItems = await apiFetch('/api/admin/items');
+                if (currentCategory) openCategory(currentCategory);
+            } catch(e) { toast('Failed to add item', 'error'); }
+        }
     </script>
 </body>
 

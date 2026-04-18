@@ -15,6 +15,8 @@ import org.minecraftsmp.dynamicshop.managers.ConfigCacheManager;
 import org.minecraftsmp.dynamicshop.managers.CategoryConfigManager;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
 import org.minecraftsmp.dynamicshop.transactions.Transaction;
+import org.minecraftsmp.dynamicshop.models.PlayerShopListing;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -121,6 +123,14 @@ public class WebServer {
                 app.get("/api/admin/categories", this::handleAdminCategories);
                 app.post("/api/admin/category/{category}", this::handleAdminCategoryUpdate);
                 app.get("/api/admin/audit", this::handleAdminAudit);
+                app.post("/api/admin/items/create", this::handleAdminItemCreate);
+                app.delete("/api/admin/item/{item}", this::handleAdminItemRemove);
+                app.get("/api/admin/special-items", this::handleAdminSpecialItems);
+                app.get("/api/admin/special-items/{id}", this::handleAdminSpecialItemGet);
+                app.post("/api/admin/special-items", this::handleAdminSpecialItemCreate);
+                app.post("/api/admin/special-items/{id}", this::handleAdminSpecialItemUpdate);
+                app.delete("/api/admin/special-items/{id}", this::handleAdminSpecialItemDelete);
+                app.delete("/api/admin/playershop/{id}", this::handleAdminPlayerShopDelete);
                 plugin.getLogger().info("Web admin panel enabled.");
             } else {
                 // Admin disabled — serve a simple message if someone hits admin.html
@@ -173,8 +183,20 @@ public class WebServer {
         for (String fileName : webFiles) {
             File targetFile = new File(webDir, fileName);
 
-            if (targetFile.exists() && !forceUpdate) {
-                continue;
+            if (!forceUpdate && targetFile.exists()) {
+                // Version-aware check: read marker from JAR and disk
+                String jarVersion  = readWebFileVersion(plugin.getResource("web/" + fileName));
+                String diskVersion = readDiskFileVersion(targetFile);
+
+                if (jarVersion != null && jarVersion.equals(diskVersion)) {
+                    continue; // Up to date — skip
+                }
+
+                if (jarVersion != null) {
+                    plugin.getLogger().info("Updating web/" + fileName
+                            + " (disk: " + diskVersion + " \u2192 jar: " + jarVersion + ")");
+                }
+                // If JAR has no marker, fall through and overwrite anyway
             }
 
             try (var input = plugin.getResource("web/" + fileName)) {
@@ -192,6 +214,39 @@ public class WebServer {
             }
         }
     }
+
+    /** Read the DS-WEB-VERSION marker from a JAR resource stream. */
+    private String readWebFileVersion(java.io.InputStream in) {
+        if (in == null) return null;
+        try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(in))) {
+            return parseVersionMarker(reader.readLine());
+        } catch (Exception e) { return null; }
+    }
+
+    /** Read the DS-WEB-VERSION marker from an on-disk file. */
+    private String readDiskFileVersion(File file) {
+        try (var reader = new java.io.BufferedReader(new java.io.FileReader(file))) {
+            return parseVersionMarker(reader.readLine());
+        } catch (Exception e) { return null; }
+    }
+
+    /** Extracts version from markers in three comment styles:
+     *  HTML: {@code <!-- DS-WEB-VERSION: 2.5.3 -->}
+     *  CSS:  {@code /* DS-WEB-VERSION: 2.5.3 * /}
+     *  JS:   {@code // DS-WEB-VERSION: 2.5.3}
+     */
+    private String parseVersionMarker(String line) {
+        if (line == null) return null;
+        String t = line.trim();
+        final String KEY = "DS-WEB-VERSION:";
+        if (!t.contains(KEY)) return null;
+        int colon = t.indexOf(KEY) + KEY.length();
+        // Strip trailing comment closers
+        String raw = t.substring(colon);
+        raw = raw.replace("-->", "").replace("*/", "").trim();
+        return raw.isEmpty() ? null : raw;
+    }
+
 
     private ObjectMapper createFixedMapper() {
         ObjectMapper mapper = new ObjectMapper();
@@ -581,6 +636,43 @@ public class WebServer {
                     imageUrl));
         }
 
+        // Add Special Items
+        for (org.minecraftsmp.dynamicshop.category.SpecialShopItem specialItem : plugin.getSpecialShopManager().getAllSpecialItems().values()) {
+            String imageUrl = "https://mc.nerothe.com/img/1.21/minecraft_" + 
+                (specialItem.getDisplayMaterial() != null ? specialItem.getDisplayMaterial().name().toLowerCase() : "enchanted_book") + ".png";
+            
+            items.add(new ShopItemDTO(
+                    "special:" + specialItem.getId(),
+                    specialItem.getName() != null ? specialItem.getName() : specialItem.getId(),
+                    specialItem.getCategory().name(),
+                    specialItem.getPrice(),
+                    0.0,
+                    0,
+                    specialItem.getPrice(),
+                    imageUrl
+            ));
+        }
+
+        // Add Player Shop Items
+        for (PlayerShopListing ps : plugin.getPlayerShopManager().getAllListings()) {
+            String psName = ps.getItem().hasItemMeta() && ps.getItem().getItemMeta().hasDisplayName() ? 
+                PlainTextComponentSerializer.plainText().serialize(ps.getItem().getItemMeta().displayName()) : 
+                prettifyItemName(ps.getItem().getType().name());
+            
+            String imageUrl = "https://mc.nerothe.com/img/1.21/minecraft_" + ps.getItem().getType().name().toLowerCase() + ".png";
+
+            items.add(new ShopItemDTO(
+                    "playershop:" + ps.getListingId(),
+                    psName,
+                    "PLAYER_SHOPS",
+                    ps.getPrice(),
+                    0.0,
+                    ps.getItem().getAmount(),
+                    ps.getPrice(),
+                    imageUrl
+            ));
+        }
+
         // Sort by display name
         items.sort(Comparator.comparing(ShopItemDTO::displayName));
 
@@ -861,6 +953,58 @@ public class WebServer {
             Map<String, Object> item = buildAdminItemMap(mat);
             items.add(item);
         }
+        
+        // Add Special Items
+        for (org.minecraftsmp.dynamicshop.category.SpecialShopItem specialItem : plugin.getSpecialShopManager().getAllSpecialItems().values()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("item", "special:" + specialItem.getId());
+            item.put("displayName", specialItem.getName() != null ? specialItem.getName() : specialItem.getId());
+            item.put("category", specialItem.getCategory().name());
+            item.put("basePrice", specialItem.getPrice());
+            item.put("buyPrice", specialItem.getPrice());
+            item.put("sellPrice", 0.0);
+            item.put("stock", 0.0);
+            item.put("stockRate", 0.0);
+            item.put("maxStock", null);
+            item.put("maxStockStorage", null);
+            item.put("shortageHours", 0.0);
+            item.put("priceIncreasePercent", 0.0);
+            item.put("buyDisabled", false);
+            item.put("sellDisabled", false);
+            item.put("disabled", false);
+            String imageUrl = "https://mc.nerothe.com/img/1.21/minecraft_" + 
+                (specialItem.getDisplayMaterial() != null ? specialItem.getDisplayMaterial().name().toLowerCase() : "enchanted_book") + ".png";
+            item.put("imageUrl", imageUrl);
+            items.add(item);
+        }
+
+        // Add Player Shop Items
+        for (PlayerShopListing ps : plugin.getPlayerShopManager().getAllListings()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            String psName = ps.getItem().hasItemMeta() && ps.getItem().getItemMeta().hasDisplayName() ? 
+                PlainTextComponentSerializer.plainText().serialize(ps.getItem().getItemMeta().displayName()) : 
+                prettifyItemName(ps.getItem().getType().name());
+
+            item.put("item", "playershop:" + ps.getListingId());
+            item.put("displayName", psName);
+            item.put("category", "PLAYER_SHOPS");
+            item.put("basePrice", ps.getPrice());
+            item.put("buyPrice", ps.getPrice());
+            item.put("sellPrice", 0.0);
+            item.put("stock", (double) ps.getItem().getAmount());
+            item.put("stockRate", 0.0);
+            item.put("maxStock", null);
+            item.put("maxStockStorage", null);
+            item.put("shortageHours", 0.0);
+            item.put("priceIncreasePercent", 0.0);
+            item.put("buyDisabled", false);
+            item.put("sellDisabled", false);
+            item.put("disabled", false);
+            String imageUrl = "https://mc.nerothe.com/img/1.21/minecraft_" + ps.getItem().getType().name().toLowerCase() + ".png";
+            item.put("imageUrl", imageUrl);
+            items.add(item);
+        }
+
         items.sort(Comparator.comparing(m -> (String) m.get("displayName")));
         ctx.json(items);
     }
@@ -1256,6 +1400,13 @@ public class WebServer {
                     .filter(mat -> ShopDataManager.detectCategory(mat) == cat)
                     .count();
 
+            if (cat == ItemCategory.PERMISSIONS || cat == ItemCategory.SERVER_SHOP) {
+                itemCount += plugin.getSpecialShopManager().getAllSpecialItems().values().stream()
+                        .filter(i -> i.getCategory() == cat).count();
+            } else if (cat == ItemCategory.PLAYER_SHOPS) {
+                itemCount += plugin.getPlayerShopManager().getAllListings().size();
+            }
+
             // Count items with shortage
             long shortageCount = ShopDataManager.getAllTrackedMaterials().stream()
                     .filter(mat -> ShopDataManager.getBasePrice(mat) >= 0)
@@ -1372,6 +1523,258 @@ public class WebServer {
             auditLog.log(getAdminUsername(ctx), "category_update", cat.name(), "Updated category layout/restock rules");
         });
 
+        ctx.json(Map.of("success", true));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SHOP ITEM CREATE / REMOVE ENDPOINTS
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * POST /api/admin/items/create
+     * Add a new material to the shop.
+     * Body: { material, basePrice, category? }
+     */
+    private void handleAdminItemCreate(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+        Map<String, Object> body;
+        try { body = ctx.bodyAsClass(Map.class); }
+        catch (Exception e) { ctx.status(400).json(Map.of("error", "Invalid JSON")); return; }
+
+        String matName = (String) body.get("material");
+        if (matName == null || matName.isBlank()) {
+            ctx.status(400).json(Map.of("error", "material is required"));
+            return;
+        }
+        Material mat = Material.matchMaterial(matName.trim());
+        if (mat == null || !mat.isItem()) {
+            ctx.status(400).json(Map.of("error", "Unknown or non-item material: " + matName));
+            return;
+        }
+        if (ShopDataManager.getBasePrice(mat) >= 0) {
+            ctx.status(409).json(Map.of("error", "Item already exists in the shop: " + mat.name()));
+            return;
+        }
+
+        double basePrice = body.containsKey("basePrice") ? ((Number) body.get("basePrice")).doubleValue() : 1.0;
+        if (basePrice <= 0) {
+            ctx.status(400).json(Map.of("error", "basePrice must be > 0"));
+            return;
+        }
+
+        String catStr = (String) body.get("category");
+        ItemCategory catOverride = null;
+        if (catStr != null && !catStr.isBlank()) {
+            try { catOverride = ItemCategory.valueOf(catStr.toUpperCase()); } catch (Exception ignored) {}
+        }
+        final ItemCategory finalCat = catOverride;
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            ShopDataManager.setBasePrice(mat, basePrice);
+            ShopDataManager.setStockDirect(mat, 0);
+            if (finalCat != null) ShopDataManager.setCategoryOverride(mat, finalCat);
+            ShopDataManager.saveDynamicData();
+            invalidateShopItemsCache();
+        });
+
+        auditLog.log(getAdminUsername(ctx), "item_create", mat.name(),
+                "basePrice=" + basePrice + (catOverride != null ? ", category=" + catOverride : ""));
+        ctx.json(Map.of("success", true, "item", mat.name()));
+    }
+
+    /**
+     * DELETE /api/admin/item/{item}
+     * Fully removes an item from the shop (sets base = -1 then removes config key).
+     */
+    private void handleAdminItemRemove(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+        Material mat = Material.matchMaterial(ctx.pathParam("item"));
+        if (mat == null || ShopDataManager.getBasePrice(mat) < 0) {
+            ctx.status(404).json(Map.of("error", "Item not in shop"));
+            return;
+        }
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            ShopDataManager.setItemDisabled(mat, true);
+            ShopDataManager.saveDynamicData();
+            invalidateShopItemsCache();
+        });
+        auditLog.log(getAdminUsername(ctx), "item_remove", mat.name(), "Disabled/removed from shop");
+        ctx.json(Map.of("success", true));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+
+    private Map<String, Object> buildSpecialItemMap(org.minecraftsmp.dynamicshop.category.SpecialShopItem item) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", item.getId());
+        m.put("name", item.getName());
+        m.put("price", item.getPrice());
+        m.put("displayMaterial", item.getDisplayMaterial() != null ? item.getDisplayMaterial().name() : "ENCHANTED_BOOK");
+        m.put("requiredPermission", item.getRequiredPermission());
+        if (item.isCommandItem()) {
+            m.put("type", "command");
+            m.put("command", item.getCommandOnPurchase());
+        } else if (item.isGroupItem()) {
+            m.put("type", "group");
+            m.put("group", item.getGroupName());
+            if (item.getGroupWorld() != null) {
+                m.put("groupWorld", item.getGroupWorld());
+            }
+        } else {
+            m.put("type", "perm");
+            m.put("permission", item.getPermission());
+            if (item.getPermissionWorld() != null) {
+                m.put("permissionWorld", item.getPermissionWorld());
+            }
+        }
+        return m;
+    }
+
+    /**
+     * GET /api/admin/special-items
+     * Returns all perm + group shop items.
+     */
+    private void handleAdminSpecialItems(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+        List<Map<String, Object>> result = plugin.getSpecialShopManager().getAllSpecialItems().values().stream()
+                .filter(i -> i.isPermissionItem() || i.isGroupItem() || i.isCommandItem())
+                .map(this::buildSpecialItemMap)
+                .collect(Collectors.toList());
+        ctx.json(result);
+    }
+
+    /**
+     * GET /api/admin/special-items/{id}
+     */
+    private void handleAdminSpecialItemGet(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+        String id = ctx.pathParam("id");
+        var item = plugin.getSpecialShopManager().getSpecialItem(id);
+        if (item == null || (!item.isPermissionItem() && !item.isGroupItem() && !item.isCommandItem())) {
+            ctx.status(404).json(Map.of("error", "Special item not found: " + id));
+            return;
+        }
+        ctx.json(buildSpecialItemMap(item));
+    }
+
+    /**
+     * POST /api/admin/special-items
+     * Create a new perm or group item.
+     * Body: { type, price, permission OR group, displayMaterial?, requiredPermission? }
+     */
+    private void handleAdminSpecialItemCreate(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+        Map<String, Object> body;
+        try { body = ctx.bodyAsClass(Map.class); }
+        catch (Exception e) { ctx.status(400).json(Map.of("error", "Invalid JSON")); return; }
+
+        String type = (String) body.getOrDefault("type", "perm");
+        double price = body.containsKey("price") ? ((Number) body.get("price")).doubleValue() : 0;
+        String requiredPerm = (String) body.get("requiredPermission");
+        String matName = (String) body.getOrDefault("displayMaterial", "");
+        Material displayMat;
+        try {
+            displayMat = (matName != null && !matName.isEmpty()) ? Material.valueOf(matName.toUpperCase()) :
+                    ("group".equalsIgnoreCase(type) ? Material.NETHER_STAR : Material.ENCHANTED_BOOK);
+        } catch (Exception e) {
+            displayMat = "group".equalsIgnoreCase(type) ? Material.NETHER_STAR : Material.ENCHANTED_BOOK;
+        }
+
+        final Material finalMat = displayMat;
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if ("group".equalsIgnoreCase(type)) {
+                String group = (String) body.get("group");
+                String groupWorld = (String) body.get("groupWorld");
+                if (group == null || group.isBlank()) return;
+                plugin.getSpecialShopManager().addGroupItem(group, groupWorld, price, finalMat,
+                        (requiredPerm != null && !requiredPerm.isBlank()) ? requiredPerm : null);
+            } else if ("command".equalsIgnoreCase(type)) {
+                String displayName = (String) body.getOrDefault("name", "Command");
+                String command = (String) body.get("command");
+                if (command == null || command.isBlank()) return;
+                plugin.getSpecialShopManager().addCommandItem(displayName, price, command, finalMat,
+                        (requiredPerm != null && !requiredPerm.isBlank()) ? requiredPerm : null);
+            } else {
+                String perm = (String) body.get("permission");
+                String permWorld = (String) body.get("permissionWorld");
+                if (perm == null || perm.isBlank()) return;
+                plugin.getSpecialShopManager().addPermissionItem(perm, permWorld, price, finalMat,
+                        (requiredPerm != null && !requiredPerm.isBlank()) ? requiredPerm : null);
+            }
+        });
+
+        auditLog.log(getAdminUsername(ctx), "special_item_create", type,
+                "type=" + type + ", price=" + price);
+        ctx.json(Map.of("success", true));
+    }
+
+    /**
+     * POST /api/admin/special-items/{id}
+     * Update price, displayMaterial, or requiredPermission of a special item.
+     * Body: { price?, displayMaterial?, requiredPermission? }
+     */
+    private void handleAdminSpecialItemUpdate(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+        String id = ctx.pathParam("id");
+        var item = plugin.getSpecialShopManager().getSpecialItem(id);
+        if (item == null || (!item.isPermissionItem() && !item.isGroupItem() && !item.isCommandItem())) {
+            ctx.status(404).json(Map.of("error", "Special item not found: " + id));
+            return;
+        }
+        Map<String, Object> body;
+        try { body = ctx.bodyAsClass(Map.class); }
+        catch (Exception e) { ctx.status(400).json(Map.of("error", "Invalid JSON")); return; }
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (body.containsKey("price")) {
+                double price = ((Number) body.get("price")).doubleValue();
+                plugin.getSpecialShopManager().updateItemPrice(id, price);
+            }
+            if (body.containsKey("displayMaterial")) {
+                try {
+                    Material mat = Material.valueOf(((String) body.get("displayMaterial")).toUpperCase());
+                    plugin.getSpecialShopManager().updateItemDisplayMaterial(id, mat);
+                } catch (Exception ignored) {}
+            }
+            if (body.containsKey("requiredPermission")) {
+                String rp = (String) body.get("requiredPermission");
+                plugin.getSpecialShopManager().updateItemRequiredPermission(id,
+                        (rp != null && !rp.isBlank()) ? rp : null);
+            }
+        });
+
+        auditLog.log(getAdminUsername(ctx), "special_item_update", id, body.toString());
+        ctx.json(Map.of("success", true));
+    }
+
+    /**
+     * DELETE /api/admin/special-items/{id}
+     */
+    private void handleAdminSpecialItemDelete(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+        String id = ctx.pathParam("id");
+        boolean removed = plugin.getSpecialShopManager().removeSpecialItem(id);
+        if (!removed) {
+            ctx.status(404).json(Map.of("error", "Special item not found: " + id));
+            return;
+        }
+        auditLog.log(getAdminUsername(ctx), "special_item_delete", id, "Deleted");
+        ctx.json(Map.of("success", true));
+    }
+
+    /**
+     * DELETE /api/admin/playershop/{id}
+     */
+    private void handleAdminPlayerShopDelete(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+        String id = ctx.pathParam("id");
+        boolean removed = plugin.getPlayerShopManager().removeListing(id);
+        if (!removed) {
+            ctx.status(404).json(Map.of("error", "Listing not found: " + id));
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, this::invalidateShopItemsCache);
+        auditLog.log(getAdminUsername(ctx), "playershop_delete", id, "Admin deleted player shop listing: " + id);
         ctx.json(Map.of("success", true));
     }
 

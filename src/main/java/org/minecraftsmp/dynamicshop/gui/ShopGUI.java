@@ -206,7 +206,7 @@ public class ShopGUI {
                 lore.add("§7Node: §f" + specialItem.getPermission());
 
                 // Check if player already owns it
-                if (plugin.getPermissionsManager().hasPermission(player, specialItem.getPermission())) {
+                if (plugin.getPermissionsManager().hasPermission(player, specialItem.getPermission(), specialItem.getPermissionWorld())) {
                     lore.add("§7");
                     lore.add("§a✔ You already own this!");
                 }

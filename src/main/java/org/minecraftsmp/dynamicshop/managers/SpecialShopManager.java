@@ -45,16 +45,16 @@ public class SpecialShopManager {
     // ------------------------------------------------------------
     // ADD PERMISSION SHOP ITEM
     // ------------------------------------------------------------
-    public void addPermissionItem(String permission, double price, Material displayMaterial,
+    public void addPermissionItem(String permission, String permissionWorld, double price, Material displayMaterial,
             String requiredPermission) {
-        String id = permission.toLowerCase().replace(".", "_");
+        String id = permission.toLowerCase().replace(".", "_") + ((permissionWorld != null && !permissionWorld.isBlank()) ? "_" + permissionWorld.toLowerCase() : "");
         String displayName = permission.replace(".", "_");
-        addPermissionItem(id, displayName, price, permission, displayMaterial, requiredPermission, true);
+        addPermissionItem(id, displayName, price, permission, permissionWorld, displayMaterial, requiredPermission, true);
     }
 
-    private void addPermissionItem(String id, String displayName, double price, String permission,
+    private void addPermissionItem(String id, String displayName, double price, String permission, String permissionWorld,
             Material displayMaterial, String requiredPermission, boolean save) {
-        SpecialShopItem item = SpecialShopItem.forPermission(id, displayName, price, permission, displayMaterial,
+        SpecialShopItem item = SpecialShopItem.forPermission(id, displayName, price, permission, permissionWorld, displayMaterial,
                 requiredPermission);
         registry.put(id, item);
 
@@ -63,6 +63,71 @@ public class SpecialShopManager {
             plugin.getConfig().set(path + ".type", "perm");
             plugin.getConfig().set(path + ".name", displayName);
             plugin.getConfig().set(path + ".permission", permission);
+            if (permissionWorld != null && !permissionWorld.isBlank()) {
+                plugin.getConfig().set(path + ".permission_world", permissionWorld);
+            }
+            plugin.getConfig().set(path + ".price", price);
+            plugin.getConfig().set(path + ".display_material", displayMaterial.name());
+            if (requiredPermission != null && !requiredPermission.isEmpty()) {
+                plugin.getConfig().set(path + ".required_permission", requiredPermission);
+            }
+            plugin.saveConfig();
+        }
+    }
+
+    // ------------------------------------------------------------
+    // ADD GROUP SHOP ITEM
+    // ------------------------------------------------------------
+    public void addGroupItem(String groupName, String groupWorld, double price, Material displayMaterial,
+            String requiredPermission) {
+        String id = "group_" + groupName.toLowerCase().replace(" ", "_").replace(".", "_") + ((groupWorld != null && !groupWorld.isBlank()) ? "_" + groupWorld.toLowerCase() : "");
+        String displayName = groupName;
+        addGroupItem(id, displayName, price, groupName, groupWorld, displayMaterial, requiredPermission, true);
+    }
+
+    private void addGroupItem(String id, String displayName, double price, String groupName, String groupWorld,
+            Material displayMaterial, String requiredPermission, boolean save) {
+        SpecialShopItem item = SpecialShopItem.forGroup(id, displayName, price, groupName, groupWorld, displayMaterial,
+                requiredPermission);
+        registry.put(id, item);
+
+        if (save) {
+            String path = "special_items." + id;
+            plugin.getConfig().set(path + ".type", "group");
+            plugin.getConfig().set(path + ".name", displayName);
+            plugin.getConfig().set(path + ".group", groupName);
+            if (groupWorld != null && !groupWorld.isBlank()) {
+                plugin.getConfig().set(path + ".group_world", groupWorld);
+            }
+            plugin.getConfig().set(path + ".price", price);
+            plugin.getConfig().set(path + ".display_material", displayMaterial.name());
+            if (requiredPermission != null && !requiredPermission.isEmpty()) {
+                plugin.getConfig().set(path + ".required_permission", requiredPermission);
+            }
+            plugin.saveConfig();
+        }
+    }
+
+    // ------------------------------------------------------------
+    // ADD COMMAND SHOP ITEM
+    // ------------------------------------------------------------
+    public void addCommandItem(String displayName, double price, String command,
+            Material displayMaterial, String requiredPermission) {
+        String id = "cmd_" + displayName.toLowerCase().replace(" ", "_").replace(".", "_");
+        addCommandItem(id, displayName, price, command, displayMaterial, requiredPermission, true);
+    }
+
+    private void addCommandItem(String id, String displayName, double price, String command,
+            Material displayMaterial, String requiredPermission, boolean save) {
+        SpecialShopItem item = SpecialShopItem.forCommand(id, displayName, price, command, displayMaterial,
+                requiredPermission);
+        registry.put(id, item);
+
+        if (save) {
+            String path = "special_items." + id;
+            plugin.getConfig().set(path + ".type", "command");
+            plugin.getConfig().set(path + ".name", displayName);
+            plugin.getConfig().set(path + ".command", command);
             plugin.getConfig().set(path + ".price", price);
             plugin.getConfig().set(path + ".display_material", displayMaterial.name());
             if (requiredPermission != null && !requiredPermission.isEmpty()) {
@@ -179,7 +244,17 @@ public class SpecialShopManager {
             switch (type.toLowerCase()) {
                 case "perm" -> {
                     String permission = plugin.getConfig().getString(basePath + "permission");
-                    addPermissionItem(id, name, price, permission, displayMaterial, requiredPermission, false);
+                    String permWorld = plugin.getConfig().getString(basePath + "permission_world");
+                    addPermissionItem(id, name, price, permission, permWorld, displayMaterial, requiredPermission, false);
+                }
+                case "group" -> {
+                    String groupName = plugin.getConfig().getString(basePath + "group");
+                    String groupWorld = plugin.getConfig().getString(basePath + "group_world");
+                    addGroupItem(id, name, price, groupName, groupWorld, displayMaterial, requiredPermission, false);
+                }
+                case "command" -> {
+                    String command = plugin.getConfig().getString(basePath + "command");
+                    addCommandItem(id, name, price, command, displayMaterial, requiredPermission, false);
                 }
                 case "server-shop" -> {
                     String identifier = plugin.getConfig().getString(basePath + "identifier");
@@ -206,7 +281,7 @@ public class SpecialShopManager {
      */
     public SpecialShopItem getPermissionItemByIndex(int index) {
         java.util.List<SpecialShopItem> permItems = registry.values().stream()
-                .filter(item -> item.getCategory() == ItemCategory.PERMISSIONS)
+                .filter(item -> item.isPermissionItem())
                 .toList();
         if (index < 0 || index >= permItems.size()) {
             return null;
@@ -215,11 +290,33 @@ public class SpecialShopManager {
     }
 
     /**
-     * Get the total count of permission items.
+     * Get the total count of permission items (individual nodes, not groups).
      */
     public int getPermissionItemCount() {
         return (int) registry.values().stream()
-                .filter(item -> item.getCategory() == ItemCategory.PERMISSIONS)
+                .filter(SpecialShopItem::isPermissionItem)
+                .count();
+    }
+
+    /**
+     * Get a group item by its index (0-based) in the group items list.
+     */
+    public SpecialShopItem getGroupItemByIndex(int index) {
+        java.util.List<SpecialShopItem> groupItems = registry.values().stream()
+                .filter(SpecialShopItem::isGroupItem)
+                .toList();
+        if (index < 0 || index >= groupItems.size()) {
+            return null;
+        }
+        return groupItems.get(index);
+    }
+
+    /**
+     * Get the total count of group items.
+     */
+    public int getGroupItemCount() {
+        return (int) registry.values().stream()
+                .filter(SpecialShopItem::isGroupItem)
                 .count();
     }
 
@@ -324,13 +421,76 @@ public class SpecialShopManager {
 
         switch (category) {
             case PERMISSIONS -> {
+                // COMMAND purchase
+                if (item.isCommandItem()) {
+                    double price = item.getPrice();
+                    if (!plugin.getEconomyManager().charge(p, price)) {
+                        p.sendMessage(plugin.getMessageManager().notEnoughMoney(
+                                plugin.getEconomyManager().format(price)));
+                        return;
+                    }
+                    String cmd = item.getCommandOnPurchase();
+                    if (cmd == null || cmd.isBlank()) {
+                        plugin.getEconomyManager().deposit(p, price);
+                        p.sendMessage(plugin.getMessageManager().specialPermissionFailed());
+                        return;
+                    }
+                    cmd = cmd.replace("{player}", p.getName())
+                             .replace("{uuid}", p.getUniqueId().toString());
+                    final String finalCmd = cmd;
+                    Bukkit.getScheduler().runTask(plugin, () ->
+                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), finalCmd));
+                    p.sendMessage("§a✔ §7" + item.getName() + " §aapplied!");
+                    Transaction tx = Transaction.now(p.getName(), Transaction.TransactionType.BUY,
+                            "CMD:" + item.getId(), 1, price, "PERMISSIONS", "command=" + item.getCommandOnPurchase());
+                    plugin.getTransactionLogger().log(tx);
+                    return;
+                }
+
+                // GROUP purchase
+                if (item.isGroupItem()) {
+                    String group = item.getGroupName();
+                    String world = item.getGroupWorld();
+                    if (group == null) {
+                        p.sendMessage(plugin.getMessageManager().specialPermissionFailed());
+                        return;
+                    }
+
+                    if (plugin.getPermissionsManager().isInGroup(p, group, world)) {
+                        p.sendMessage(plugin.getMessageManager().specialPermissionAlreadyOwned());
+                        return;
+                    }
+
+                    double price = item.getPrice();
+                    if (!plugin.getEconomyManager().charge(p, price)) {
+                        String formatted = plugin.getEconomyManager().format(price);
+                        p.sendMessage(plugin.getMessageManager().notEnoughMoney(formatted));
+                        return;
+                    }
+
+                    boolean success = plugin.getPermissionsManager().grantGroup(p, group, world);
+
+                    if (success) {
+                        p.sendMessage(plugin.getMessageManager().specialPermissionSuccess(group));
+                        Transaction tx = Transaction.now(p.getName(), Transaction.TransactionType.BUY,
+                                "GROUP:" + group, 1, price, "PERMISSIONS", "group=" + group + (world != null ? ",world=" + world : ""));
+                        plugin.getTransactionLogger().log(tx);
+                    } else {
+                        plugin.getEconomyManager().deposit(p, price);
+                        p.sendMessage(plugin.getMessageManager().specialPermissionFailed());
+                    }
+                    return;
+                }
+
+                // PERMISSION NODE purchase
                 String perm = item.getPermission();
+                String world = item.getPermissionWorld();
                 if (perm == null) {
                     p.sendMessage(plugin.getMessageManager().specialPermissionFailed());
                     return;
                 }
 
-                if (plugin.getPermissionsManager().hasPermission(p, perm)) {
+                if (plugin.getPermissionsManager().hasPermission(p, perm, world)) {
                     p.sendMessage(plugin.getMessageManager().specialPermissionAlreadyOwned());
                     return;
                 }
@@ -342,12 +502,12 @@ public class SpecialShopManager {
                     return;
                 }
 
-                boolean success = plugin.getPermissionsManager().grantPermission(p, perm);
+                boolean success = plugin.getPermissionsManager().grantPermission(p, perm, world);
 
                 if (success) {
                     p.sendMessage(plugin.getMessageManager().specialPermissionSuccess(perm));
                     Transaction tx = Transaction.now(p.getName(), Transaction.TransactionType.BUY,
-                            "PERMISSION:" + perm, 1, price, "PERMISSIONS", "permission=" + perm);
+                            "PERMISSION:" + perm, 1, price, "PERMISSIONS", "permission=" + perm + (world != null ? ",world=" + world : ""));
                     plugin.getTransactionLogger().log(tx);
                 } else {
                     plugin.getEconomyManager().deposit(p, price);

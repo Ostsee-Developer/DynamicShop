@@ -20,6 +20,17 @@ public class SpecialShopItem {
     // For server shop items (logical identifier, e.g. "pig_spawner")
     private final String itemIdentifier;
 
+    // Optional world scope for permission node ops (null = global)
+    private String permissionWorld;
+
+    // For group items (Vault permission group name)
+    private final String groupName;
+    // Optional world scope for group ops (null = global)
+    private String groupWorld;
+
+    // For command items (console command with {player} placeholder)
+    private String commandOnPurchase;
+
     // Icon used in GUIs
     private final Material displayMaterial;
 
@@ -41,6 +52,7 @@ public class SpecialShopItem {
                             ItemCategory category,
                             String permission,
                             String itemIdentifier,
+                            String groupName,
                             Material displayMaterial,
                             String requiredPermission) {
 
@@ -50,6 +62,7 @@ public class SpecialShopItem {
         this.category = category;
         this.permission = permission;
         this.itemIdentifier = itemIdentifier;
+        this.groupName = groupName;
         this.displayMaterial = displayMaterial;
         this.requiredPermission = requiredPermission;
 
@@ -57,6 +70,9 @@ public class SpecialShopItem {
         this.deliveryMethod = null;
         this.material = null;
         this.nbt = null;
+        this.commandOnPurchase = null;
+        this.groupWorld = null;
+        this.permissionWorld = null;
     }
 
     // ----------------------------------------------------
@@ -66,6 +82,7 @@ public class SpecialShopItem {
                                                 String displayName,
                                                 double price,
                                                 String permission,
+                                                String permissionWorld,
                                                 Material displayMaterial,
                                                 String requiredPermission) {
 
@@ -76,14 +93,70 @@ public class SpecialShopItem {
                 ItemCategory.PERMISSIONS,
                 permission,
                 null,
+                null,
                 displayMaterial,
                 requiredPermission
         );
 
         // Delivery for permission items is handled via PermissionsManager in purchase(),
         // but we keep this here in case we reuse giveServerShopItem for perms later.
+        item.permissionWorld = (permissionWorld != null && !permissionWorld.isBlank()) ? permissionWorld : null;
         item.deliveryMethod = "permission";
 
+        return item;
+    }
+
+    // ----------------------------------------------------
+    // FACTORY: GROUP ITEM
+    // ----------------------------------------------------
+    public static SpecialShopItem forGroup(String id,
+                                           String displayName,
+                                           double price,
+                                           String groupName,
+                                           String groupWorld,
+                                           Material displayMaterial,
+                                           String requiredPermission) {
+
+        SpecialShopItem item = new SpecialShopItem(
+                id,
+                displayName,
+                price,
+                ItemCategory.PERMISSIONS,
+                null,
+                null,
+                groupName,
+                displayMaterial,
+                requiredPermission
+        );
+        item.groupWorld = (groupWorld != null && !groupWorld.isBlank()) ? groupWorld : null;
+        item.deliveryMethod = "group";
+
+        return item;
+    }
+
+    // ----------------------------------------------------
+    // FACTORY: COMMAND ITEM
+    // ----------------------------------------------------
+    public static SpecialShopItem forCommand(String id,
+                                             String displayName,
+                                             double price,
+                                             String command,
+                                             Material displayMaterial,
+                                             String requiredPermission) {
+
+        SpecialShopItem item = new SpecialShopItem(
+                id,
+                displayName,
+                price,
+                ItemCategory.PERMISSIONS,
+                null,
+                null,
+                null,
+                displayMaterial,
+                requiredPermission
+        );
+        item.commandOnPurchase = command;
+        item.deliveryMethod = "command";
         return item;
     }
 
@@ -104,6 +177,7 @@ public class SpecialShopItem {
                 ItemCategory.SERVER_SHOP,
                 null,
                 identifier,
+                null,
                 displayMaterial,
                 requiredPermission
         );
@@ -166,6 +240,26 @@ public class SpecialShopItem {
         return nbt;
     }
 
+    public String getGroupName() {
+        return groupName;
+    }
+
+    public String getGroupWorld() {
+        return groupWorld;
+    }
+
+    public String getPermissionWorld() {
+        return permissionWorld;
+    }
+
+    public String getCommandOnPurchase() {
+        return commandOnPurchase;
+    }
+
+    public void setCommandOnPurchase(String command) {
+        this.commandOnPurchase = command;
+    }
+
     public String getRequiredPermission() {
         return requiredPermission;
     }
@@ -203,7 +297,18 @@ public class SpecialShopItem {
     }
 
     public boolean isPermissionItem() {
-        return category == ItemCategory.PERMISSIONS;
+        return category == ItemCategory.PERMISSIONS
+                && (groupName == null || groupName.isEmpty())
+                && (commandOnPurchase == null || commandOnPurchase.isEmpty());
+    }
+
+    public boolean isGroupItem() {
+        return category == ItemCategory.PERMISSIONS
+                && groupName != null && !groupName.isEmpty();
+    }
+
+    public boolean isCommandItem() {
+        return commandOnPurchase != null && !commandOnPurchase.isEmpty();
     }
 
     public boolean isServerShopItem() {

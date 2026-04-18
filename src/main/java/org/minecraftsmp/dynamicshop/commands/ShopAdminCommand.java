@@ -525,6 +525,45 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
 
+                // ----------------------------------------------------------
+                // ADD GROUP ITEM
+                // /shopadmin add group <price> <groupname> [requiresperm <required.permission>]
+                // ----------------------------------------------------------
+                if (type.equalsIgnoreCase("group")) {
+
+                    if (args.length < 4) {
+                        sender.sendMessage("§cUsage: /shopadmin add group <price> <groupname> [requiresperm <perm>]");
+                        return true;
+                    }
+
+                    double price = parsePrice(sender, args[2]);
+                    if (price < 0)
+                        return true;
+
+                    String groupName = args[3];
+
+                    String requiredPerm = null;
+                    if (args.length >= 6 && args[4].equalsIgnoreCase("requiresperm")) {
+                        requiredPerm = args[5];
+                    }
+
+                    // Display material = held item or default NETHER_STAR
+                    ItemStack heldItem = p.getInventory().getItemInMainHand();
+                    Material displayMaterial = (heldItem != null && heldItem.getType() != Material.AIR)
+                            ? heldItem.getType()
+                            : Material.NETHER_STAR;
+
+                    plugin.getSpecialShopManager().addGroupItem(groupName, price, displayMaterial, requiredPerm);
+
+                    sender.sendMessage("§a✓ §7Added group item: §e" + groupName + " §7for §e"
+                            + plugin.getEconomyManager().format(price));
+                    if (requiredPerm != null) {
+                        sender.sendMessage("§7Requires permission: §e" + requiredPerm);
+                    }
+
+                    return true;
+                }
+
                 // --------------------------------------------------------------
                 // ADD CUSTOM SERVER-SHOP ITEM
                 // /shopadmin add server-shop <price> <identifier> [requiresperm
@@ -728,7 +767,44 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
 
-                sender.sendMessage("§cUnknown remove type. Use: /shopadmin remove perm <slot>");
+                // /shopadmin remove group <slot>
+                if (removeType.equals("group")) {
+                    if (args.length < 3) {
+                        sender.sendMessage("§cUsage: /shopadmin remove group <slot>");
+                        sender.sendMessage("§7Slot numbers start at 1");
+                        return true;
+                    }
+
+                    int slot;
+                    try {
+                        slot = Integer.parseInt(args[2]);
+                    } catch (NumberFormatException e) {
+                        sender.sendMessage("§cInvalid slot number: " + args[2]);
+                        return true;
+                    }
+
+                    int count = plugin.getSpecialShopManager().getGroupItemCount();
+                    if (slot < 1 || slot > count) {
+                        sender.sendMessage("§cInvalid slot. There are only §e" + count + " §cgroup items.");
+                        return true;
+                    }
+
+                    var gItem = plugin.getSpecialShopManager().getGroupItemByIndex(slot - 1);
+                    if (gItem == null) {
+                        sender.sendMessage("§cCould not find group item at slot " + slot);
+                        return true;
+                    }
+
+                    boolean gRemoved = plugin.getSpecialShopManager().removeSpecialItem(gItem.getId());
+                    if (gRemoved) {
+                        sender.sendMessage("§a✓ §7Removed group item: §e" + gItem.getGroupName());
+                    } else {
+                        sender.sendMessage("§cFailed to remove group item.");
+                    }
+                    return true;
+                }
+
+                sender.sendMessage("§cUnknown remove type. Use: /shopadmin remove perm <slot> | remove group <slot>");
                 return true;
             }
 
@@ -824,6 +900,7 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 2 && args[0].equalsIgnoreCase("remove")) {
             out.add("perm");
+            out.add("group");
             return out;
         }
 
@@ -873,9 +950,18 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             return out;
         }
 
+        if (args.length == 3 && args[0].equalsIgnoreCase("remove") && args[1].equalsIgnoreCase("group")) {
+            int count = plugin.getSpecialShopManager().getGroupItemCount();
+            for (int i = 1; i <= count; i++) {
+                out.add(String.valueOf(i));
+            }
+            return out;
+        }
+
         if (args.length == 2 && args[0].equalsIgnoreCase("add")) {
             out.add("item");
             out.add("perm");
+            out.add("group");
             out.add("server-shop");
             return out;
         }
@@ -886,6 +972,10 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             out.add("<price>");
         } else if (args.length == 4 && args[1].equalsIgnoreCase("perm")) {
             out.add("<permission.node>");
+        } else if (args.length == 3 && args[1].equalsIgnoreCase("group")) {
+            out.add("<price>");
+        } else if (args.length == 4 && args[1].equalsIgnoreCase("group")) {
+            out.add("<groupname>");
         } else if (args.length == 3 && args[1].equalsIgnoreCase("server-shop")) {
             out.add("<price>");
         } else if (args.length == 4 && args[1].equalsIgnoreCase("server-shop")) {
