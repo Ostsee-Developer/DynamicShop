@@ -509,7 +509,7 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                             ? heldItem.getType()
                             : Material.EMERALD;
 
-                    plugin.getSpecialShopManager().addPermissionItem(perm, price, displayMaterial, requiredPerm);
+                    plugin.getSpecialShopManager().addPermissionItem(perm, null, price, displayMaterial, requiredPerm);
 
                     Map<String, String> placeholders = new HashMap<>();
                     placeholders.put("permission", perm);
@@ -553,7 +553,7 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                             ? heldItem.getType()
                             : Material.NETHER_STAR;
 
-                    plugin.getSpecialShopManager().addGroupItem(groupName, price, displayMaterial, requiredPerm);
+                    plugin.getSpecialShopManager().addGroupItem(groupName, null, price, displayMaterial, requiredPerm);
 
                     sender.sendMessage("§a✓ §7Added group item: §e" + groupName + " §7for §e"
                             + plugin.getEconomyManager().format(price));
