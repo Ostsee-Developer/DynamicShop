@@ -12,7 +12,11 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
+import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.enchantments.Enchantment;
+import io.papermc.paper.registry.RegistryAccess;
+import io.papermc.paper.registry.RegistryKey;
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
 import org.minecraftsmp.dynamicshop.category.SpecialShopItem;
@@ -515,7 +519,15 @@ public class ShopListener implements Listener {
         }
 
         plugin.getEconomyManager().charge(p, totalCost);
-        p.getInventory().addItem(new ItemStack(mat, amount));
+
+        // Special handling: enchanted books get a random enchantment
+        if (mat == Material.ENCHANTED_BOOK) {
+            for (int i = 0; i < amount; i++) {
+                p.getInventory().addItem(createRandomEnchantedBook());
+            }
+        } else {
+            p.getInventory().addItem(new ItemStack(mat, amount));
+        }
 
         ShopDataManager.updateStock(mat, -amount);
 
@@ -895,6 +907,29 @@ public class ShopListener implements Listener {
             return damageable.hasDamage();
         }
         return false;
+    }
+
+    /**
+     * Creates an enchanted book with a random valid enchantment at a random valid level.
+     */
+    private ItemStack createRandomEnchantedBook() {
+        ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
+        EnchantmentStorageMeta meta = (EnchantmentStorageMeta) book.getItemMeta();
+        if (meta != null) {
+            // Get all registered enchantments
+            var registry = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT);
+            List<Enchantment> enchantments = new ArrayList<>();
+            registry.forEach(enchantments::add);
+
+            if (!enchantments.isEmpty()) {
+                Random rand = new Random();
+                Enchantment chosen = enchantments.get(rand.nextInt(enchantments.size()));
+                int level = 1 + rand.nextInt(chosen.getMaxLevel());
+                meta.addStoredEnchant(chosen, level, false);
+                book.setItemMeta(meta);
+            }
+        }
+        return book;
     }
 
     // ------------------------------------------------------------------
