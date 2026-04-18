@@ -810,7 +810,7 @@ items:
   # Books & Enchanting
   BOOK:                     { base: 3.0 }
   WRITABLE_BOOK:            { base: 5.0 }
-  ENCHANTED_BOOK:           { base: 50.0 }
+  ENCHANTED_BOOK:           { base: -1 }  # Disabled — add specific enchanted books as Server Shop items
   EXPERIENCE_BOTTLE:        { base: 20.0 }
 
   # Fireworks & Rockets
