@@ -102,7 +102,7 @@ public class ShopDataManager {
                 tickAllShortage();
             }
         };
-        shortageTicker.runTaskTimer(plugin, 6000L, 6000L); // 5 minutes = 6000 ticks
+        shortageTicker.runTaskTimer(plugin, 72000L, 72000L); // 1 hour = 72000 ticks
     }
 
     public static void reload() {
