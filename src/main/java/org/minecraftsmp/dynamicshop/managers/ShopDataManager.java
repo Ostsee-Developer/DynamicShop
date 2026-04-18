@@ -88,6 +88,16 @@ public class ShopDataManager {
                 saveTimer.runTaskTimer(plugin, seconds * 20L, seconds * 20L);
             }
         }
+
+        // Periodic shortage tick — bakes shortage accumulation/decay every 5 minutes
+        // so items at zero stock gain shortage even with no trades,
+        // and items with supply lose shortage even with no trades.
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                tickAllShortage();
+            }
+        }.runTaskTimer(plugin, 6000L, 6000L); // 5 minutes = 6000 ticks
     }
 
     public static void reload() {
@@ -1057,15 +1067,13 @@ public class ShopDataManager {
      */
     public static double getHoursInShortage(Material mat) {
         double stored = shortageHoursMap.getOrDefault(mat, 0.0);
-        if (stored <= 0) return 0.0;
-
         double stock = getStock(mat);
 
         if (stock <= 0) {
             // Currently out of stock — add live duration since last update
             long diff = System.currentTimeMillis() - getLastUpdate(mat);
             stored += (diff / 3600000.0);
-        } else {
+        } else if (stored > 0) {
             // Stock is positive — apply decay based on how full the shop is
             double decayRate = ConfigCacheManager.shortageDecayPercentPerHour;
             if (decayRate > 0) {
@@ -1118,6 +1126,20 @@ public class ShopDataManager {
     public static void setHoursInShortage(Material mat, double hours) {
         shortageHoursMap.put(mat, hours);
         markDirty(mat);
+    }
+
+    /**
+     * Periodic tick — bakes shortage accumulation/decay for ALL items.
+     * Called every 5 minutes so items passively gain/lose shortage
+     * even without player transactions.
+     */
+    public static void tickAllShortage() {
+        long now = System.currentTimeMillis();
+        for (Material mat : itemConfigs.keySet()) {
+            if (getBasePrice(mat) < 0) continue; // skip disabled
+            accumulateShortage(mat);
+            lastUpdateMap.put(mat, now);
+        }
     }
 
     public static void addHoursInShortage(Material mat, double deltaHours) {
