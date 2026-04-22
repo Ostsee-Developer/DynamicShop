@@ -350,7 +350,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
     private boolean handleSellCommand(Player player, String[] args) {
         // Check permission
         if (!player.hasPermission("dynamicshop.playershop.sell")) {
-            player.sendMessage("§c✗ §7You don't have permission to sell items!");
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-no-permission-sell"));
             return true;
         }
 
@@ -359,13 +359,13 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         try {
             price = Double.parseDouble(args[1]);
         } catch (NumberFormatException e) {
-            player.sendMessage("§c✗ §7Invalid price! Usage: §e/shop sell <price>");
-            player.sendMessage("§7Example: §e/shop sell 100");
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-invalid-price"));
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-price-example"));
             return true;
         }
 
         if (price <= 0) {
-            player.sendMessage("§c✗ §7Price must be greater than 0!");
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-price-must-be-positive"));
             return true;
         }
 
@@ -373,7 +373,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         ItemStack heldItem = player.getInventory().getItemInMainHand();
 
         if (heldItem == null || heldItem.getType() == Material.AIR) {
-            player.sendMessage("§c✗ §7Hold an item in your hand to list it!");
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-hold-item"));
             return true;
         }
 
@@ -387,8 +387,10 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         int currentListings = plugin.getPlayerShopManager().getListingCount(player.getUniqueId());
 
         if (currentListings >= maxListings) {
-            player.sendMessage("§c✗ §7You've reached the maximum of §c" + maxListings + " §7listings!");
-            player.sendMessage("§7Remove some items from your shop first.");
+            Map<String, String> ph1 = new HashMap<>();
+            ph1.put("max", String.valueOf(maxListings));
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-max-listings", ph1));
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-remove-items-first"));
             return true;
         }
 
@@ -401,13 +403,16 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
 
         if (success) {
             String itemName = itemToList.getType().toString().toLowerCase().replace("_", " ");
-            player.sendMessage("§a✓ §7Listed §f" + itemName + " §7x" + itemToList.getAmount() +
-                    " §7for §a$" + String.format("%.2f", price));
-            player.sendMessage("§7Players can now buy this from your shop!");
+            Map<String, String> ph2 = new HashMap<>();
+            ph2.put("item", itemName);
+            ph2.put("amount", String.valueOf(itemToList.getAmount()));
+            ph2.put("price", String.format("%.2f", price));
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-listed", ph2));
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-listed-success"));
         } else {
             // Return item if failed
             player.getInventory().addItem(itemToList);
-            player.sendMessage("§c✗ §7Failed to list item!");
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-listing-failed"));
         }
 
         return true;

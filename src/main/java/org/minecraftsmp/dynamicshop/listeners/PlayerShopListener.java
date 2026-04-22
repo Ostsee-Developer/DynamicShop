@@ -193,7 +193,7 @@ public class PlayerShopListener implements Listener {
             PlayerShopManager manager = plugin.getPlayerShopManager();
             if (manager.getListingCount(gui.getShopOwnerId()) == 0) {
                 player.closeInventory();
-                player.sendMessage("§7Your shop is now empty.");
+                player.sendMessage(plugin.getMessageManager().getMessage("playershop-shop-empty"));
             } else {
                 // Recreate GUI to refresh
                 PlayerShopViewGUI newGui = new PlayerShopViewGUI(plugin, player, gui.getShopOwnerId());
@@ -207,7 +207,7 @@ public class PlayerShopListener implements Listener {
             // Refresh or go back if no items left
             PlayerShopManager manager = plugin.getPlayerShopManager();
             if (manager.getListingCount(gui.getShopOwnerId()) == 0) {
-                player.sendMessage("§7This shop is now empty.");
+                player.sendMessage(plugin.getMessageManager().getMessage("playershop-other-shop-empty"));
                 PlayerShopBrowserGUI browser = new PlayerShopBrowserGUI(plugin, player);
                 registerBrowserGUI(player, browser);
                 browser.open();
@@ -234,7 +234,10 @@ public class PlayerShopListener implements Listener {
         manager.removeListing(listing.getListingId());
 
         String itemName = item.getType().toString().toLowerCase().replace("_", " ");
-        player.sendMessage("§a✓ §7You reclaimed your §f" + itemName + " §7x" + item.getAmount());
+        Map<String, String> ph1 = new HashMap<>();
+        ph1.put("item", itemName);
+        ph1.put("amount", String.valueOf(item.getAmount()));
+        player.sendMessage(plugin.getMessageManager().getMessage("playershop-reclaimed", ph1));
     }
 
     /**
@@ -248,8 +251,9 @@ public class PlayerShopListener implements Listener {
         // 1. Check buyer's balance
         // ---------------------------
         if (!plugin.getEconomyManager().hasEnough(player, price)) {
-            player.sendMessage("§c✗ §7You need §c$" + String.format("%.2f", price) +
-                    " §7to buy this item!");
+            Map<String, String> ph2 = new HashMap<>();
+            ph2.put("price", String.format("%.2f", price));
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-not-enough-money", ph2));
             player.closeInventory();
             return;
         }
@@ -259,7 +263,7 @@ public class PlayerShopListener implements Listener {
         // ---------------------------
         ItemStack item = listing.getItem();
         if (!hasInventorySpace(player, item)) {
-            player.sendMessage("§c✗ §7Not enough inventory space!");
+            player.sendMessage(plugin.getMessageManager().getMessage("playershop-not-enough-space"));
             return;
         }
 
@@ -270,9 +274,12 @@ public class PlayerShopListener implements Listener {
         if (seller != null && seller.isOnline()) {
             String sellerItemName = item.getType().toString().toLowerCase().replace("_", " ");
             plugin.getEconomyManager().deposit(seller, price);
-            seller.sendMessage("§a✓ §7Your §f" + sellerItemName + " §7x" + item.getAmount() +
-                    " §7was purchased by §e" + player.getName() + " §7for §a$" +
-                    String.format("%.2f", price));
+            Map<String, String> ph3 = new HashMap<>();
+            ph3.put("item", sellerItemName);
+            ph3.put("amount", String.valueOf(item.getAmount()));
+            ph3.put("buyer", player.getName());
+            ph3.put("price", String.format("%.2f", price));
+            seller.sendMessage(plugin.getMessageManager().getMessage("playershop-sold-notification", ph3));
         } else if (seller != null) {
             OfflinePlayer offline = Bukkit.getOfflinePlayer(listing.getSellerId());
             plugin.getEconomyManager().depositOffline(offline, price);
@@ -286,8 +293,11 @@ public class PlayerShopListener implements Listener {
 
         // Buyer confirmation
         String itemName = item.getType().toString().toLowerCase().replace("_", " ");
-        player.sendMessage("§a✓ §7Purchased §f" + itemName + " §7x" + item.getAmount() +
-                " §7for §a$" + String.format("%.2f", price));
+        Map<String, String> ph4 = new HashMap<>();
+        ph4.put("item", itemName);
+        ph4.put("amount", String.valueOf(item.getAmount()));
+        ph4.put("price", String.format("%.2f", price));
+        player.sendMessage(plugin.getMessageManager().getMessage("playershop-purchased", ph4));
 
         // Log transaction
         plugin.getLogger().info("[PlayerShops] " + player.getName() + " bought " +
