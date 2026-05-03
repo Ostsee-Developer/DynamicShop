@@ -106,7 +106,7 @@ public class ShopDialogManager {
                         ))
                         .build()
                 )
-                .type(DialogType.confirmation(
+                .type(DialogType.multiAction(List.of(
                         // BUY button
                         ActionButton.create(
                                 buyBtn,
@@ -167,9 +167,28 @@ public class ShopDialogManager {
                                         },
                                         ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).lifetime(java.time.Duration.ofMinutes(5)).build()
                                 )
+                        ),
+                        // RETURN button
+                        ActionButton.create(
+                                returnBtn,
+                                returnDesc,
+                                50,
+                                DialogAction.customClick(
+                                        (view, audience) -> {
+                                            if (audience instanceof Player p) {
+                                                p.closeInventory();
+                                                // Re-open the shop GUI
+                                                if (gui instanceof org.minecraftsmp.dynamicshop.gui.ShopGUI shopGUI) {
+                                                    shopGUI.open();
+                                                } else if (gui instanceof org.minecraftsmp.dynamicshop.gui.SearchResultsGUI searchGUI) {
+                                                    searchGUI.open();
+                                                }
+                                            }
+                                        },
+                                        ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).lifetime(java.time.Duration.ofMinutes(5)).build()
+                                )
                         )
-                ))
-        );
+                )).build()));
         player.showDialog(dialog);
     }
 
