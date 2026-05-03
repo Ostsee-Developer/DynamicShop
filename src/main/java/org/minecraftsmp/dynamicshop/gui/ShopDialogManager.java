@@ -53,8 +53,8 @@ public class ShopDialogManager {
                                 DialogBody.item(displayItem)
                                         .showDecorations(true)
                                         .showTooltip(true)
-                                        .width(64)
-                                        .height(64)
+                                        .width(128)
+                                        .height(128)
                                         .build(),
                                 DialogBody.plainMessage(
                                         Component.text("Buy Price: ", NamedTextColor.GRAY)
