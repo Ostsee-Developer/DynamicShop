@@ -76,7 +76,7 @@ public class ShopDialogManager {
                                         .step(1f)
                                         .initial(0f)
                                         .width(300)
-                                        .labelFormat("Quantity: %.0f")
+                                        .labelFormat("%s: %s")
                                         .build()
                         ))
                         .build()
