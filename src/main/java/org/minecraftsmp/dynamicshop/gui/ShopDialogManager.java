@@ -87,11 +87,10 @@ public class ShopDialogManager {
                 .base(DialogBase.builder(titleComp)
                         .canCloseWithEscape(true)
                         .body(List.of(
-                                DialogBody.plainMessage(Component.text(" "), 10), // Padding to lower the item sprite
+                                DialogBody.plainMessage(Component.text("\n"), 10), // Small padding
                                 DialogBody.item(displayItem)
                                         .showDecorations(true)
                                         .showTooltip(true)
-                                        .height(110)
                                         .build(),
                                 DialogBody.plainMessage(buyPriceComp, 300),
                                 DialogBody.plainMessage(sellPriceComp, 300)
@@ -112,7 +111,7 @@ public class ShopDialogManager {
                         ActionButton.create(
                                 buyBtn,
                                 buyDesc,
-                                200,
+                                100,
                                 DialogAction.customClick(
                                         (view, audience) -> {
                                             if (audience instanceof Player p) {
