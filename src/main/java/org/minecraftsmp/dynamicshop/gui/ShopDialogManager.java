@@ -64,10 +64,18 @@ public class ShopDialogManager {
         Component qtyLabel = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
                 plugin.getMessageManager().getMessage("dialog-quantity"), player);
                 
-        Component confirmBtn = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
-                plugin.getMessageManager().getMessage("dialog-confirm-button"), player);
-        Component confirmDesc = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
-                plugin.getMessageManager().getMessage("dialog-confirm-desc"), player);
+        Component buyBtn = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-buy-button"), player);
+        Component buyDesc = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-buy-desc"), player);
+                
+        Component sellBtn = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-sell-button"), player);
+        Component sellDesc = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-sell-desc"), player);
+                
+        Component sellAllLabel = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-sell-all-label"), player);
                 
         Component returnBtn = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
                 plugin.getMessageManager().getMessage("dialog-return-button"), player);
@@ -79,6 +87,7 @@ public class ShopDialogManager {
                 .base(DialogBase.builder(titleComp)
                         .canCloseWithEscape(true)
                         .body(List.of(
+                                DialogBody.plainMessage(Component.text(" "), 10), // Padding to lower the item sprite
                                 DialogBody.item(displayItem)
                                         .showDecorations(true)
                                         .showTooltip(true)
@@ -88,20 +97,21 @@ public class ShopDialogManager {
                                 DialogBody.plainMessage(sellPriceComp, 300)
                         ))
                         .inputs(List.of(
-                                DialogInput.numberRange("quantity", qtyLabel, -128f, 128f)
+                                DialogInput.numberRange("quantity", qtyLabel, 0f, 128f)
                                         .step(1f)
                                         .initial(0f)
                                         .width(300)
                                         .labelFormat("%s: %s")
-                                        .build()
+                                        .build(),
+                                DialogInput.bool("sell_all", sellAllLabel).build()
                         ))
                         .build()
                 )
                 .type(DialogType.multiAction(List.of(
-                        // CONFIRM button
+                        // BUY button
                         ActionButton.create(
-                                confirmBtn,
-                                confirmDesc,
+                                buyBtn,
+                                buyDesc,
                                 200,
                                 DialogAction.customClick(
                                         (view, audience) -> {
@@ -109,23 +119,54 @@ public class ShopDialogManager {
                                                 Float qtyFloat = view.getFloat("quantity");
                                                 int qty = qtyFloat != null ? qtyFloat.intValue() : 0;
                                                 
-                                                if (qty == 0) {
-                                                    p.sendMessage(Component.text(
-                                                            "Set quantity to buy (+) or sell (-)!", NamedTextColor.RED));
+                                                if (qty <= 0) {
+                                                    p.sendMessage(Component.text("Set a quantity to buy!", net.kyori.adventure.text.format.NamedTextColor.RED));
                                                     return;
                                                 }
                                                 
-                                                if (qty > 0) {
-                                                    plugin.getShopListener().buyItem(p, mat, qty, gui);
-                                                } else {
-                                                    plugin.getShopListener().sellItem(p, mat, Math.abs(qty), gui);
-                                                }
+                                                plugin.getShopListener().buyItem(p, mat, qty, gui);
                                             }
                                         },
-                                        ClickCallback.Options.builder()
-                                                .uses(ClickCallback.UNLIMITED_USES)
-                                                .lifetime(java.time.Duration.ofMinutes(5))
-                                                .build()
+                                        ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).lifetime(java.time.Duration.ofMinutes(5)).build()
+                                )
+                        ),
+                        // SELL button
+                        ActionButton.create(
+                                sellBtn,
+                                sellDesc,
+                                100,
+                                DialogAction.customClick(
+                                        (view, audience) -> {
+                                            if (audience instanceof Player p) {
+                                                Boolean sellAll = view.getBoolean("sell_all");
+                                                if (sellAll != null && sellAll) {
+                                                    // Sell all logic
+                                                    int totalItems = 0;
+                                                    for (ItemStack invItem : p.getInventory().getContents()) {
+                                                        if (invItem != null && invItem.getType() == mat) {
+                                                            totalItems += invItem.getAmount();
+                                                        }
+                                                    }
+                                                    if (totalItems > 0) {
+                                                        plugin.getShopListener().sellItem(p, mat, totalItems, gui);
+                                                    } else {
+                                                        p.sendMessage(Component.text("You don't have any to sell!", net.kyori.adventure.text.format.NamedTextColor.RED));
+                                                    }
+                                                    return;
+                                                }
+                                                
+                                                Float qtyFloat = view.getFloat("quantity");
+                                                int qty = qtyFloat != null ? qtyFloat.intValue() : 0;
+                                                
+                                                if (qty <= 0) {
+                                                    p.sendMessage(Component.text("Set a quantity to sell!", net.kyori.adventure.text.format.NamedTextColor.RED));
+                                                    return;
+                                                }
+                                                
+                                                plugin.getShopListener().sellItem(p, mat, qty, gui);
+                                            }
+                                        },
+                                        ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).lifetime(java.time.Duration.ofMinutes(5)).build()
                                 )
                         ),
                         // RETURN button
