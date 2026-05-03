@@ -111,7 +111,7 @@ public class ShopDialogManager {
                         ActionButton.create(
                                 buyBtn,
                                 buyDesc,
-                                100,
+                                70,
                                 DialogAction.customClick(
                                         (view, audience) -> {
                                             if (audience instanceof Player p) {
@@ -133,7 +133,7 @@ public class ShopDialogManager {
                         ActionButton.create(
                                 sellBtn,
                                 sellDesc,
-                                100,
+                                70,
                                 DialogAction.customClick(
                                         (view, audience) -> {
                                             if (audience instanceof Player p) {
@@ -172,7 +172,7 @@ public class ShopDialogManager {
                         ActionButton.create(
                                 returnBtn,
                                 returnDesc,
-                                100,
+                                70,
                                 DialogAction.customClick(
                                         (view, audience) -> {
                                             if (audience instanceof Player p) {
