@@ -187,7 +187,7 @@ messages:
   dialog-buy-desc: "<gray>Buy the selected quantity"
   dialog-sell-button: "<#ffa0b1>Sell"
   dialog-sell-desc: "<gray>Sell the selected quantity"
-  dialog-sell-all-label: "<white>Sell All Inventory"
+  dialog-sell-all-label: "<white>Sell All"
   dialog-return-button: "<gray>Return"
   dialog-return-desc: "<gray>Go back to the shop"
 
