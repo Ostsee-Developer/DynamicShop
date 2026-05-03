@@ -45,9 +45,38 @@ public class ShopDialogManager {
         double buyPrice1 = ShopDataManager.getTotalBuyCost(mat, 1);
         double sellPrice1 = ShopDataManager.getTotalSellValue(mat, 1);
 
+        java.util.Map<String, String> placeholders = new java.util.HashMap<>();
+        placeholders.put("item", itemName);
+        placeholders.put("price", plugin.getEconomyManager().format(buyPrice1));
+        
+        java.util.Map<String, String> sellPlaceholders = new java.util.HashMap<>();
+        sellPlaceholders.put("price", plugin.getEconomyManager().format(sellPrice1));
+
+        Component titleComp = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-title", placeholders), player);
+                
+        Component buyPriceComp = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-buy-price", placeholders), player);
+                
+        Component sellPriceComp = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-sell-price", sellPlaceholders), player);
+                
+        Component qtyLabel = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-quantity"), player);
+                
+        Component confirmBtn = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-confirm-button"), player);
+        Component confirmDesc = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-confirm-desc"), player);
+                
+        Component returnBtn = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-return-button"), player);
+        Component returnDesc = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-return-desc"), player);
+
         // Build the dialog dynamically
         Dialog dialog = Dialog.create(builder -> builder.empty()
-                .base(DialogBase.builder(Component.text(itemName, NamedTextColor.GOLD))
+                .base(DialogBase.builder(titleComp)
                         .canCloseWithEscape(true)
                         .body(List.of(
                                 DialogBody.item(displayItem)
@@ -56,23 +85,11 @@ public class ShopDialogManager {
                                         .width(256)
                                         .height(256)
                                         .build(),
-                                DialogBody.plainMessage(
-                                        Component.text("Buy Price: ", NamedTextColor.GRAY)
-                                                .append(Component.text(
-                                                        plugin.getEconomyManager().format(buyPrice1) + " each",
-                                                        TextColor.color(0xAEFFC1))),
-                                        300),
-                                DialogBody.plainMessage(
-                                        Component.text("Sell Price: ", NamedTextColor.GRAY)
-                                                .append(Component.text(
-                                                        plugin.getEconomyManager().format(sellPrice1) + " each",
-                                                        TextColor.color(0xFFA0B1))),
-                                        300)
+                                DialogBody.plainMessage(buyPriceComp, 300),
+                                DialogBody.plainMessage(sellPriceComp, 300)
                         ))
                         .inputs(List.of(
-                                DialogInput.numberRange("quantity",
-                                                Component.text("Quantity (-128 Sell, +128 Buy)", NamedTextColor.WHITE),
-                                                -128f, 128f)
+                                DialogInput.numberRange("quantity", qtyLabel, -128f, 128f)
                                         .step(1f)
                                         .initial(0f)
                                         .width(300)
@@ -84,8 +101,8 @@ public class ShopDialogManager {
                 .type(DialogType.multiAction(List.of(
                         // CONFIRM button
                         ActionButton.create(
-                                Component.text("Confirm Transaction", TextColor.color(0xAEFFC1)),
-                                Component.text("Process buy/sell based on slider value"),
+                                confirmBtn,
+                                confirmDesc,
                                 200,
                                 DialogAction.customClick(
                                         (view, audience) -> {
@@ -114,8 +131,8 @@ public class ShopDialogManager {
                         ),
                         // RETURN button
                         ActionButton.create(
-                                Component.text("Return", NamedTextColor.GRAY),
-                                Component.text("Go back to the shop"),
+                                returnBtn,
+                                returnDesc,
                                 100,
                                 DialogAction.customClick(
                                         (view, audience) -> {

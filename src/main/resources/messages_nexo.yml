@@ -177,6 +177,16 @@ messages:
   player-shop-browser-title: "<white><shift:-48><glyph:shop_gui_menu><shift:-170><black><bold>Player Shops"
   player-shop-view-title: "<white><shift:-48><glyph:shop_item_display><shift:-170><black><bold>{player}'s Shop"
 
+  # Dialog GUI
+  dialog-title: "<white><shift:-48><glyph:shop_item_display><shift:-170><black><bold>{item}"
+  dialog-buy-price: "&7Buy Price: &a{price} each"
+  dialog-sell-price: "&7Sell Price: &c{price} each"
+  dialog-quantity: "<white>Quantity (-128 Sell, +128 Buy)"
+  dialog-confirm-button: "<#aeffc1>Confirm Transaction"
+  dialog-confirm-desc: "<gray>Process buy/sell based on slider value"
+  dialog-return-button: "<gray>Return"
+  dialog-return-desc: "<gray>Go back to the shop"
+
 # ================================================================
 # Translation Guide
 # ================================================================

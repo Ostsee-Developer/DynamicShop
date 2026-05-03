@@ -178,6 +178,16 @@ messages:
   player-shop-browser-title: "&6&lPlayer Shops"
   player-shop-view-title: "&6&l{player}'s Shop"
 
+  # Dialog GUI
+  dialog-title: "&6{item}"
+  dialog-buy-price: "&7Buy Price: &a{price} each"
+  dialog-sell-price: "&7Sell Price: &c{price} each"
+  dialog-quantity: "<white>Quantity (-128 Sell, +128 Buy)"
+  dialog-confirm-button: "<#aeffc1>Confirm Transaction"
+  dialog-confirm-desc: "<gray>Process buy/sell based on slider value"
+  dialog-return-button: "<gray>Return"
+  dialog-return-desc: "<gray>Go back to the shop"
+
 # ================================================================
 # Translation Guide
 # ================================================================
