@@ -82,6 +82,7 @@ public class ShopDialogManager {
                                 DialogBody.item(displayItem)
                                         .showDecorations(true)
                                         .showTooltip(true)
+                                        .height(110)
                                         .build(),
                                 DialogBody.plainMessage(buyPriceComp, 300),
                                 DialogBody.plainMessage(sellPriceComp, 300)
