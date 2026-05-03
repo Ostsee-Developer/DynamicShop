@@ -3,6 +3,8 @@ package org.minecraftsmp.dynamicshop.managers;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.minecraftsmp.dynamicshop.DynamicShop;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import java.io.File;
 import java.io.InputStream;
@@ -37,7 +39,36 @@ public class MessageManager {
 
         // Create messages.yml if it doesn't exist
         if (!messagesFile.exists()) {
-            plugin.saveResource("messages.yml", false);
+            // If Nexo is installed, use the Nexo-glyph template as the default
+            boolean nexoInstalled = plugin.getServer().getPluginManager().getPlugin("Nexo") != null;
+            if (nexoInstalled) {
+                try {
+                    // Save messages_nexo.yml content AS messages.yml
+                    InputStream nexoStream = plugin.getResource("messages_nexo.yml");
+                    if (nexoStream != null) {
+                        java.nio.file.Files.copy(nexoStream, messagesFile.toPath());
+                        nexoStream.close();
+                        plugin.getLogger().info("Nexo detected! Generated messages.yml with glyph support.");
+                    } else {
+                        plugin.saveResource("messages.yml", false);
+                    }
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Failed to generate Nexo messages template, using default.");
+                    plugin.saveResource("messages.yml", false);
+                }
+            } else {
+                plugin.saveResource("messages.yml", false);
+            }
+        }
+
+        // Also generate messages_nexo.yml template as a reference if it doesn't exist
+        File nexoFile = new File(plugin.getDataFolder(), "messages_nexo.yml");
+        if (!nexoFile.exists()) {
+            try {
+                plugin.saveResource("messages_nexo.yml", false);
+            } catch (IllegalArgumentException e) {
+                plugin.getLogger().warning("Could not generate messages_nexo.yml template.");
+            }
         }
 
         messagesConfig = YamlConfiguration.loadConfiguration(messagesFile);
@@ -102,6 +133,75 @@ public class MessageManager {
         message = message.replace('&', '§');
 
         return message;
+    }
+
+    /**
+     * Parses a string into a Component.
+     * If the string contains Nexo tags like &lt;glyph:...&gt; or &lt;shift:...&gt;, 
+     * uses MiniMessage so Nexo's registered TagResolvers can process them.
+     * Otherwise falls back to the legacy serializer for simple color-coded strings.
+     */
+    public static Component parseComponent(String text) {
+        return parseComponent(text, null);
+    }
+
+    /**
+     * Parses a string into a Component, with optional player context for Nexo permission-aware glyphs.
+     */
+    public static Component parseComponent(String text, org.bukkit.entity.Player player) {
+        if (text == null) return Component.empty();
+        
+        // Check if the text contains Nexo/MiniMessage tags
+        if (text.contains("<glyph:") || text.contains("<shift:")) {
+            // Convert legacy color codes (§ and &) to MiniMessage format for compatibility
+            String mmText = text.replace('§', '&');
+            // Convert &X color codes to MiniMessage <color> tags
+            mmText = convertLegacyToMiniMessage(mmText);
+            // Use Nexo's MiniMessage instance which has GlyphTag and ShiftTag resolvers
+            try {
+                Component result;
+                if (player != null) {
+                    result = NexoWrapper.parseMiniMessage(mmText, player);
+                } else {
+                    result = NexoWrapper.parseMiniMessage(mmText);
+                }
+                if (result != null) return result;
+            } catch (Throwable ignored) {}
+            // Fallback to vanilla MiniMessage
+            return net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(mmText);
+        }
+        
+        // For simple strings without Nexo tags, use legacy serializer
+        return LegacyComponentSerializer.legacyAmpersand().deserialize(text.replace('§', '&'));
+    }
+
+    /**
+     * Convert legacy & color codes to MiniMessage format.
+     * e.g. "&f" -> "<white>", "&0&l" -> "<black><bold>"
+     */
+    private static String convertLegacyToMiniMessage(String text) {
+        // Replace formatting codes first (order matters - do these before colors)
+        text = text.replace("&l", "<bold>").replace("&L", "<bold>");
+        text = text.replace("&o", "<italic>").replace("&O", "<italic>");
+        text = text.replace("&n", "<underlined>").replace("&N", "<underlined>");
+        text = text.replace("&m", "<strikethrough>").replace("&M", "<strikethrough>");
+        text = text.replace("&k", "<obfuscated>").replace("&K", "<obfuscated>");
+        text = text.replace("&r", "<reset>").replace("&R", "<reset>");
+        
+        // Replace color codes
+        text = text.replace("&0", "<black>").replace("&1", "<dark_blue>");
+        text = text.replace("&2", "<dark_green>").replace("&3", "<dark_aqua>");
+        text = text.replace("&4", "<dark_red>").replace("&5", "<dark_purple>");
+        text = text.replace("&6", "<gold>").replace("&7", "<gray>");
+        text = text.replace("&8", "<dark_gray>").replace("&9", "<blue>");
+        text = text.replace("&a", "<green>").replace("&A", "<green>");
+        text = text.replace("&b", "<aqua>").replace("&B", "<aqua>");
+        text = text.replace("&c", "<red>").replace("&C", "<red>");
+        text = text.replace("&d", "<light_purple>").replace("&D", "<light_purple>");
+        text = text.replace("&e", "<yellow>").replace("&E", "<yellow>");
+        text = text.replace("&f", "<white>").replace("&F", "<white>");
+        
+        return text;
     }
 
     /**

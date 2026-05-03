@@ -162,13 +162,7 @@ public class AdminCategoryEditGUI {
     }
 
     private ItemStack createFiller() {
-        ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta = filler.getItemMeta();
-        if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize(" "));
-            filler.setItemMeta(meta);
-        }
-        return filler;
+        return org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
     }
 
     /**
@@ -191,7 +185,7 @@ public class AdminCategoryEditGUI {
         ItemStack heldItem = player.getInventory().getItemInMainHand();
         if (!isRightClick && heldItem != null && heldItem.getType() != Material.AIR) {
             // Use the held item's material
-            CategoryConfigManager.setIcon(category, heldItem.getType());
+            CategoryConfigManager.setIcon(category, heldItem.getType().name());
             player.sendMessage("§a[DynamicShop] §fIcon changed to §e" + heldItem.getType().name());
             render();
             return;
@@ -207,7 +201,7 @@ public class AdminCategoryEditGUI {
                     if (input != null && !input.trim().isEmpty()) {
                         Material mat = Material.matchMaterial(input.trim());
                         if (mat != null) {
-                            CategoryConfigManager.setIcon(category, mat);
+                            CategoryConfigManager.setIcon(category, mat.name());
                             player.sendMessage("§a[DynamicShop] §fIcon changed to §e" + mat.name());
                         } else {
                             player.sendMessage("§c[DynamicShop] §fInvalid material: " + input);

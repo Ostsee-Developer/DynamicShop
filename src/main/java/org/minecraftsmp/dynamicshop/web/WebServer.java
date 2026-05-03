@@ -132,6 +132,7 @@ public class WebServer {
                 app.post("/api/admin/special-items/{id}", this::handleAdminSpecialItemUpdate);
                 app.delete("/api/admin/special-items/{id}", this::handleAdminSpecialItemDelete);
                 app.delete("/api/admin/playershop/{id}", this::handleAdminPlayerShopDelete);
+                app.post("/api/admin/reload", this::handleAdminReload);
                 plugin.getLogger().info("Web admin panel enabled.");
             } else {
                 // Admin disabled — serve a simple message if someone hits admin.html
@@ -434,7 +435,7 @@ public class WebServer {
                     case "spenders" -> Double.compare(b.spent, a.spent);
                     case "traders" -> Long.compare(b.trades, a.trades);
                     case "volume" -> Double.compare(b.volume, a.volume);
-                    default -> Double.compare(b.netProfit, a.netProfit); // earners
+                    default -> Double.compare(b.earned, a.earned); // earners
                 })
                 .limit(limit)
                 .collect(Collectors.toList());
@@ -1417,6 +1418,22 @@ public class WebServer {
     }
 
     /**
+     * POST /api/admin/reload
+     * Reload all plugin configuration (config.yml, messages.yml, items.yml)
+     */
+    private void handleAdminReload(Context ctx) {
+        if (ctx.statusCode() == 401) return;
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            plugin.reload();
+        });
+
+        auditLog.log(getAdminUsername(ctx), "plugin_reload", "global", "Plugin configuration reloaded via web admin");
+        invalidateShopItemsCache();
+        ctx.json(Map.of("success", true, "message", "Plugin reloaded"));
+    }
+
+    /**
      * GET /api/admin/audit
      * Returns the admin audit log (newest first, max 200 entries)
      */
@@ -1536,7 +1553,11 @@ public class WebServer {
                     CategoryConfigManager.removeIcon(cat);
                 } else {
                     try {
-                        CategoryConfigManager.setIcon(cat, Material.valueOf(iconName.toUpperCase()));
+                        if (iconName.startsWith("nexo:")) {
+                            CategoryConfigManager.setIcon(cat, iconName);
+                        } else {
+                            CategoryConfigManager.setIcon(cat, Material.valueOf(iconName.toUpperCase()).name());
+                        }
                     } catch (Exception ignored) {}
                 }
                 categoryChanged = true;

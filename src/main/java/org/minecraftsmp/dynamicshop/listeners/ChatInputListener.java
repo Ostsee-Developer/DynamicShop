@@ -166,13 +166,18 @@ public class ChatInputListener implements Listener {
             CategoryConfigManager.setDisplayName(pending.category, coloredName);
             player.sendMessage("§a[DynamicShop] §fName changed to: " + coloredName);
         } else if (pending.type == InputType.ICON) {
-            String materialName = input.toUpperCase().replace(" ", "_");
-            try {
-                Material mat = Material.valueOf(materialName);
-                CategoryConfigManager.setIcon(pending.category, mat);
-                player.sendMessage("§a[DynamicShop] §fIcon changed to §e" + mat.name());
-            } catch (IllegalArgumentException e) {
-                player.sendMessage("§c[DynamicShop] §fInvalid material: " + input);
+            if (input.toLowerCase().startsWith("nexo:")) {
+                CategoryConfigManager.setIcon(pending.category, input);
+                player.sendMessage("§a[DynamicShop] §fIcon changed to §e" + input);
+            } else {
+                String materialName = input.toUpperCase().replace(" ", "_");
+                try {
+                    Material mat = Material.valueOf(materialName);
+                    CategoryConfigManager.setIcon(pending.category, mat.name());
+                    player.sendMessage("§a[DynamicShop] §fIcon changed to §e" + mat.name());
+                } catch (IllegalArgumentException e) {
+                    player.sendMessage("§c[DynamicShop] §fInvalid material: " + input);
+                }
             }
         }
     }

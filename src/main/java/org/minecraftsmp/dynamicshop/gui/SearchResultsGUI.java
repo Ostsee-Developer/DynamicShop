@@ -9,8 +9,9 @@ import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
 import org.minecraftsmp.dynamicshop.managers.ProtocolShopManager;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
+import org.minecraftsmp.dynamicshop.managers.ConfigCacheManager;
 import org.minecraftsmp.dynamicshop.util.ShopItemBuilder;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -114,7 +115,7 @@ public class SearchResultsGUI {
         if (meta == null)
             return item;
 
-        meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§e§l" + mat.name().replace("_", " ")));
+        meta.displayName(MessageManager.parseComponent("§e§l" + mat.name().replace("_", " ")));
 
         double buy = ShopDataManager.getTotalBuyCost(mat, 1);
         double sell = ShopDataManager.getTotalSellValue(mat, 1);
@@ -152,7 +153,7 @@ public class SearchResultsGUI {
         lore.add(plugin.getMessageManager().getMessage("search-lore-sell-1"));
         lore.add(plugin.getMessageManager().getMessage("search-lore-sell-64"));
 
-        meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+        meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
         item.setItemMeta(meta);
         return item;
     }
@@ -178,6 +179,14 @@ public class SearchResultsGUI {
             return;
 
         Material mat = results.get(slot);
+
+        // Dialog-based buy/sell (configurable)
+        if (ConfigCacheManager.useDialogGui && !org.minecraftsmp.dynamicshop.util.BedrockUtil.isBedrock(player)) {
+            player.closeInventory();
+            plugin.getShopDialogManager().openDialog(player, mat, this);
+            return;
+        }
+
         int amount = shiftClick ? 64 : 1;
 
         if (rightClick) {

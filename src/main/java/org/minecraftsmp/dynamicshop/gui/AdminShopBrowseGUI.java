@@ -10,9 +10,11 @@ import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
 import org.minecraftsmp.dynamicshop.category.SpecialShopItem;
 import org.minecraftsmp.dynamicshop.managers.ItemsAdderWrapper;
+import org.minecraftsmp.dynamicshop.managers.NexoWrapper;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
 import org.minecraftsmp.dynamicshop.util.ShopItemBuilder;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -44,8 +46,10 @@ public class AdminShopBrowseGUI {
         this.plugin = plugin;
         this.player = player;
         this.currentCategory = startCategory;
+        String title = plugin.getMessageManager().getMessage("admin-shop-gui-title");
+        if (title == null) title = "§4§lAdmin Shop";
         this.inventory = Bukkit.createInventory(null, SIZE,
-                LegacyComponentSerializer.legacySection().deserialize("§4§lAdmin Shop"));
+                MessageManager.parseComponent(title));
 
         loadItemsForCategory();
     }
@@ -115,6 +119,8 @@ public class AdminShopBrowseGUI {
         ItemStack item = null;
         if ("itemsadder".equalsIgnoreCase(sItem.getDeliveryMethod()) && sItem.getNbt() != null) {
             item = ItemsAdderWrapper.getItem(sItem.getNbt());
+        } else if ("nexo".equalsIgnoreCase(sItem.getDeliveryMethod()) && sItem.getNbt() != null) {
+            item = NexoWrapper.getItem(sItem.getNbt());
         }
 
         if (item == null) {
@@ -125,7 +131,7 @@ public class AdminShopBrowseGUI {
         }
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§e§l" + sItem.getName()));
+            meta.displayName(MessageManager.parseComponent("§e§l" + sItem.getName()));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7───────────────────");
@@ -148,7 +154,7 @@ public class AdminShopBrowseGUI {
             lore.add("");
             lore.add("§e§lRight-click to EDIT");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -167,7 +173,7 @@ public class AdminShopBrowseGUI {
             item = new ItemStack(Material.BARRIER);
             ItemMeta meta = item.getItemMeta();
             if (meta != null) {
-                meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§c§lINVALID: " + mat.name()));
+                meta.displayName(MessageManager.parseComponent("§c§lINVALID: " + mat.name()));
                 item.setItemMeta(meta);
             }
             return item;
@@ -179,9 +185,9 @@ public class AdminShopBrowseGUI {
             String displayName = mat.name().replace("_", " ");
             if (disabled) {
                 meta.displayName(
-                        LegacyComponentSerializer.legacySection().deserialize("§c§m" + displayName + " §7(DISABLED)"));
+                        MessageManager.parseComponent("§c§m" + displayName + " §7(DISABLED)"));
             } else {
-                meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§a§l" + displayName));
+                meta.displayName(MessageManager.parseComponent("§a§l" + displayName));
             }
 
             List<String> lore = new ArrayList<>();
@@ -194,7 +200,7 @@ public class AdminShopBrowseGUI {
             lore.add("");
             lore.add("§e§lRight-click to EDIT");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
 
@@ -233,14 +239,14 @@ public class AdminShopBrowseGUI {
         ItemStack pageItem = new ItemStack(Material.PAPER);
         ItemMeta pageMeta = pageItem.getItemMeta();
         if (pageMeta != null) {
-            pageMeta.displayName(LegacyComponentSerializer.legacySection()
-                    .deserialize("§7Page §f" + (page + 1) + " §7/ §f" + (maxPage + 1)));
+            pageMeta.displayName(MessageManager.parseComponent(
+                    "§7Page §f" + (page + 1) + " §7/ §f" + (maxPage + 1)));
             List<String> pageLore = new ArrayList<>();
             pageLore.add("§7Items: §e" + items.size());
             pageLore.add("");
             pageLore.add("§e§lClick to edit Config");
             pageMeta.lore(
-                    pageLore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+                    pageLore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             pageItem.setItemMeta(pageMeta);
         }
         inventory.setItem(navRow + 4, pageItem);
@@ -256,8 +262,8 @@ public class AdminShopBrowseGUI {
         ItemStack item = new ItemStack(currentCategory.getIcon());
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection()
-                    .deserialize("§b§lCategory: " + currentCategory.getDisplayName()));
+            meta.displayName(MessageManager.parseComponent(
+                    "§b§lCategory: " + currentCategory.getDisplayName()));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7───────────────────");
@@ -278,20 +284,14 @@ public class AdminShopBrowseGUI {
             lore.add("§7───────────────────");
             lore.add("§eClick to cycle category");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
     }
 
     private ItemStack createFiller() {
-        ItemStack filler = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
-        ItemMeta meta = filler.getItemMeta();
-        if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize(" "));
-            filler.setItemMeta(meta);
-        }
-        return filler;
+        return org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
     }
 
     /**

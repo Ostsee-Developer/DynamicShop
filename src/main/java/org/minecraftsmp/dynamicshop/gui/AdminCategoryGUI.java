@@ -146,12 +146,7 @@ public class AdminCategoryGUI {
         int navStart = SIZE - 9;
 
         // Fill navigation row
-        ItemStack navFiller = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
-        ItemMeta navMeta = navFiller.getItemMeta();
-        if (navMeta != null) {
-            navMeta.displayName(LegacyComponentSerializer.legacySection().deserialize(" "));
-            navFiller.setItemMeta(navMeta);
-        }
+        ItemStack navFiller = org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
         for (int i = navStart; i < SIZE; i++) {
             inventory.setItem(i, navFiller);
         }
@@ -225,14 +220,13 @@ public class AdminCategoryGUI {
     }
 
     private ItemStack createFiller() {
-        ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemStack filler = org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
         ItemMeta meta = filler.getItemMeta();
         if (meta != null) {
             if (heldCategory != null) {
                 meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§7§oEmpty Slot"));
                 meta.lore(List.of(text("§eRight-click to place category here")));
             } else {
-                meta.displayName(LegacyComponentSerializer.legacySection().deserialize(" "));
                 meta.lore(List.of(text("§eLeft-click to create")));
             }
             filler.setItemMeta(meta);

@@ -9,7 +9,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +48,7 @@ public class ItemActionGUI {
         String title = plugin.getMessageManager().getMessage("item-action-title");
         if (title == null) title = "§8Buy / Sell";
         this.inventory = Bukkit.createInventory(null, SIZE,
-                LegacyComponentSerializer.legacySection().deserialize(title));
+                MessageManager.parseComponent(title));
     }
 
     public void open() {
@@ -91,7 +91,7 @@ public class ItemActionGUI {
         ItemStack back = new ItemStack(Material.ARROW);
         ItemMeta backMeta = back.getItemMeta();
         if (backMeta != null) {
-            backMeta.displayName(LegacyComponentSerializer.legacySection().deserialize(backName));
+            backMeta.displayName(MessageManager.parseComponent(backName));
             back.setItemMeta(backMeta);
         }
         inventory.setItem(SLOT_BACK, back);
@@ -101,8 +101,7 @@ public class ItemActionGUI {
         ItemStack item = new ItemStack(targetItem, 1);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection()
-                    .deserialize("§e§l" + targetItem.name().replace("_", " ")));
+            meta.displayName(MessageManager.parseComponent("§e§l" + targetItem.name().replace("_", " ")));
             item.setItemMeta(meta);
         }
         return item;
@@ -116,8 +115,7 @@ public class ItemActionGUI {
         ItemStack info = new ItemStack(Material.PAPER);
         ItemMeta meta = info.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection()
-                    .deserialize("§e§lItem Info"));
+            meta.displayName(MessageManager.parseComponent("§e§lItem Info"));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7Buy: §a" + plugin.getEconomyManager().format(buyPrice));
@@ -136,17 +134,18 @@ public class ItemActionGUI {
 
                 java.util.Map<String, String> percentPlaceholders = new java.util.HashMap<>();
                 percentPlaceholders.put("percent", String.format("%,.0f", percentIncrease) + (capped ? " (MAX)" : ""));
+                percentPlaceholders.put("hourly_rate", String.format("%.1f", org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.hourlyIncreasePercent));
                 MessageManager.addLoreIfNotEmpty(lore,
                         plugin.getMessageManager().getMessage("shop-lore-price-increase", percentPlaceholders));
                 MessageManager.addLoreIfNotEmpty(lore,
-                        plugin.getMessageManager().getMessage("shop-lore-price-increase-note"));
+                        plugin.getMessageManager().getMessage("shop-lore-price-increase-note", percentPlaceholders));
 
             } else {
                 lore.add("§7Stock: §a" + String.format("%.0f", stock));
             }
 
             meta.lore(lore.stream()
-                    .map(s -> LegacyComponentSerializer.legacySection().deserialize(s))
+                    .map(s -> MessageManager.parseComponent(s))
                     .toList());
             info.setItemMeta(meta);
         }
@@ -160,12 +159,12 @@ public class ItemActionGUI {
         ItemStack button = new ItemStack(material);
         ItemMeta meta = button.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize(name));
+            meta.displayName(MessageManager.parseComponent(name));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7Price: §e" + price);
             meta.lore(lore.stream()
-                    .map(s -> LegacyComponentSerializer.legacySection().deserialize(s))
+                    .map(s -> MessageManager.parseComponent(s))
                     .toList());
 
             button.setItemMeta(meta);
@@ -174,13 +173,7 @@ public class ItemActionGUI {
     }
 
     private ItemStack createFiller() {
-        ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta = filler.getItemMeta();
-        if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize(" "));
-            filler.setItemMeta(meta);
-        }
-        return filler;
+        return org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
     }
 
     /**

@@ -37,13 +37,13 @@ messages:
   category-lore-no-items: "&cNo items available"
 
   # GUI general messages
-  gui-category-title: "&8&lShop Categories"
-  shop-gui-title: "&3&lDynamicShop"
-  admin-shop-gui-title: "&4&lAdmin Shop"
-  gui-nav-previous: "&ePrevious Page"
+  gui-category-title: "<white><shift:-48><glyph:shop_gui_menu><shift:-170><black><bold>Categories"
+  shop-gui-title: "<white><shift:-48><glyph:shop_item_display><shift:-170><black><bold>{category}"
+  admin-shop-gui-title: "<white><shift:-48><glyph:shop_gui_menu><shift:-170><black><bold>Shop Admin"
+  gui-nav-previous: "&e&lPrevious Page"
   gui-nav-previous-lore: "&7Click to go back"
   gui-nav-previous-none: "&cNo previous page"
-  gui-nav-next: "&eNext Page"
+  gui-nav-next: "&e&lNext Page"
   gui-nav-next-lore: "&7Click to go forward"
   gui-nav-next-none: "&cNo next page"
   gui-nav-back: "&c&lBack to Categories"
@@ -144,7 +144,6 @@ messages:
   admin-usage-add-server-shop: "&cUsage: /shopadmin add server-shop <price> <identifier>"
 
   # Player Shop messages
-  player-shop-view-title: "&6&l{player}'s Shop"
   playershop-listed: "&a✓ &7Listed &f{item} &7x{amount} &7for &a${price}"
   playershop-listed-success: "&7Players can now buy this from your shop!"
   playershop-reclaimed: "&a✓ &7Reclaimed &f{item} &7x{amount}"
@@ -167,7 +166,7 @@ messages:
   shop-stock-limited: "&cStock is limited! You only bought &e{stock} &citems."
 
   # Bedrock/Item Action GUI
-  item-action-title: "&8Buy / Sell"
+  item-action-title: "<white><shift:-13><glyph:shop_item_display><shift:-170><black><bold>Buy / Sell"
   item-action-buy-1: "&a&lBuy ×1"
   item-action-buy-64: "&a&lBuy ×64"
   item-action-sell-1: "&c&lSell ×1"
@@ -175,8 +174,8 @@ messages:
   item-action-back: "&7&l← Back"
 
   # Player Shop GUI titles
-  player-shop-browser-title: "&6&lPlayer Shops"
-  player-shop-view-title: "&6&l{player}'s Shop"
+  player-shop-browser-title: "<white><shift:-48><glyph:shop_gui_menu><shift:-170><black><bold>Player Shops"
+  player-shop-view-title: "<white><shift:-48><glyph:shop_item_display><shift:-170><black><bold>{player}'s Shop"
 
 # ================================================================
 # Translation Guide

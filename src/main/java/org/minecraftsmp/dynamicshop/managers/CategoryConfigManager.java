@@ -23,24 +23,24 @@ public class CategoryConfigManager {
     private static YamlConfiguration config;
 
     private static final Map<ItemCategory, Integer> categorySlots = new HashMap<>();
-    private static final Map<ItemCategory, Material> categoryIcons = new HashMap<>();
+    private static final Map<ItemCategory, String> categoryIcons = new HashMap<>();
     private static final Map<ItemCategory, String> categoryNames = new HashMap<>();
 
     // Default slot positions (same as original CategorySelectionGUI layout)
     // Custom categories default to -1 (hidden) until admin assigns a slot
     private static final Map<ItemCategory, Integer> DEFAULT_SLOTS = new HashMap<>();
     static {
-        DEFAULT_SLOTS.put(ItemCategory.MISC, 11);
-        DEFAULT_SLOTS.put(ItemCategory.BLOCKS, 12);
-        DEFAULT_SLOTS.put(ItemCategory.REDSTONE, 13);
-        DEFAULT_SLOTS.put(ItemCategory.TOOLS, 14);
-        DEFAULT_SLOTS.put(ItemCategory.ARMOR, 15);
-        DEFAULT_SLOTS.put(ItemCategory.FOOD, 20);
-        DEFAULT_SLOTS.put(ItemCategory.FARMING, 21);
-        DEFAULT_SLOTS.put(ItemCategory.WOOD, 22);
-        DEFAULT_SLOTS.put(ItemCategory.PERMISSIONS, 23);
-        DEFAULT_SLOTS.put(ItemCategory.SERVER_SHOP, 24);
-        DEFAULT_SLOTS.put(ItemCategory.PLAYER_SHOPS, 31);
+        DEFAULT_SLOTS.put(ItemCategory.MISC, 20);
+        DEFAULT_SLOTS.put(ItemCategory.BLOCKS, 21);
+        DEFAULT_SLOTS.put(ItemCategory.REDSTONE, 22);
+        DEFAULT_SLOTS.put(ItemCategory.TOOLS, 23);
+        DEFAULT_SLOTS.put(ItemCategory.ARMOR, 24);
+        DEFAULT_SLOTS.put(ItemCategory.FOOD, 29);
+        DEFAULT_SLOTS.put(ItemCategory.FARMING, 30);
+        DEFAULT_SLOTS.put(ItemCategory.WOOD, 31);
+        DEFAULT_SLOTS.put(ItemCategory.PERMISSIONS, 32);
+        DEFAULT_SLOTS.put(ItemCategory.SERVER_SHOP, 33);
+        DEFAULT_SLOTS.put(ItemCategory.PLAYER_SHOPS, 40);
         // Custom categories hidden by default (-1)
         for (ItemCategory cat : ItemCategory.values()) {
             if (cat.isCustomCategory()) {
@@ -96,12 +96,7 @@ public class CategoryConfigManager {
                 if (catSection.contains("icon")) {
                     String iconStr = catSection.getString("icon");
                     if (iconStr != null) {
-                        try {
-                            Material icon = Material.valueOf(iconStr.toUpperCase());
-                            categoryIcons.put(category, icon);
-                        } catch (IllegalArgumentException e) {
-                            plugin.getLogger().warning("Invalid icon material for category " + key);
-                        }
+                        categoryIcons.put(category, iconStr);
                     }
                 }
 
@@ -133,7 +128,7 @@ public class CategoryConfigManager {
 
             // Save icon if overridden
             if (categoryIcons.containsKey(category)) {
-                config.set(path + ".icon", categoryIcons.get(category).name());
+                config.set(path + ".icon", categoryIcons.get(category));
             }
 
             // Save name if overridden
@@ -186,10 +181,31 @@ public class CategoryConfigManager {
     }
 
     /**
+     * Get the icon item stack for a category
+     */
+    public static org.bukkit.inventory.ItemStack getIconItem(ItemCategory category) {
+        String iconStr = categoryIcons.get(category);
+        if (iconStr != null) {
+            if (iconStr.toLowerCase().startsWith("nexo:")) {
+                String nexoId = iconStr.substring(5);
+                if (DynamicShop.getInstance().getServer().getPluginManager().getPlugin("Nexo") != null) {
+                    org.bukkit.inventory.ItemStack nexoItem = NexoWrapper.getItem(nexoId);
+                    if (nexoItem != null) return nexoItem.clone();
+                }
+            } else {
+                try {
+                    return new org.bukkit.inventory.ItemStack(Material.valueOf(iconStr.toUpperCase()));
+                } catch (Exception ignored) {}
+            }
+        }
+        return new org.bukkit.inventory.ItemStack(category.getIcon());
+    }
+
+    /**
      * Get the icon for a category (returns override or default from enum)
      */
     public static Material getIcon(ItemCategory category) {
-        return categoryIcons.getOrDefault(category, category.getIcon());
+        return categoryIcons.containsKey(category) ? Material.CHEST : category.getIcon();
     }
 
     /**
@@ -209,10 +225,11 @@ public class CategoryConfigManager {
     /**
      * Set a custom icon for a category
      */
-    public static void setIcon(ItemCategory category, Material icon) {
-        categoryIcons.put(category, icon);
+    public static void setIcon(ItemCategory category, String iconStr) {
+        categoryIcons.put(category, iconStr);
+        save();
     }
-
+    
     /**
      * Set a custom display name for a category
      */

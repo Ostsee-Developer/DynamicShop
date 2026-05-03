@@ -36,6 +36,7 @@ public class DynamicShop extends JavaPlugin {
     private org.minecraftsmp.dynamicshop.listeners.ChatInputListener chatInputListener;
     private org.minecraftsmp.dynamicshop.managers.InputManager inputManager;
     private RestockManager restockManager;
+    private org.minecraftsmp.dynamicshop.gui.ShopDialogManager shopDialogManager;
 
     private static DynamicShop instance;
 
@@ -137,6 +138,10 @@ public class DynamicShop extends JavaPlugin {
             getConfig().set("gui.shop_menu_size", 54);
             configChanged = true;
         }
+        if (!getConfig().isSet("gui.use_dialog_gui")) {
+            getConfig().set("gui.use_dialog_gui", false);
+            configChanged = true;
+        }
 
         // Logging
         if (!getConfig().isSet("logging.max_recent_transactions")) {
@@ -224,6 +229,9 @@ public class DynamicShop extends JavaPlugin {
 
         // Initialize input manager (auto-detects Dialog API availability)
         this.inputManager = new org.minecraftsmp.dynamicshop.managers.InputManager(this);
+
+        // Initialize dialog-based shop GUI (optional, config-driven)
+        this.shopDialogManager = new org.minecraftsmp.dynamicshop.gui.ShopDialogManager(this);
 
         // Update checker — async GitHub release check + OP join notifications
         UpdateChecker updateChecker = new UpdateChecker(this);
@@ -372,6 +380,10 @@ public class DynamicShop extends JavaPlugin {
 
     public org.minecraftsmp.dynamicshop.managers.InputManager getInputManager() {
         return inputManager;
+    }
+
+    public org.minecraftsmp.dynamicshop.gui.ShopDialogManager getShopDialogManager() {
+        return shopDialogManager;
     }
 
     private void setupPlaceholderAPI() {

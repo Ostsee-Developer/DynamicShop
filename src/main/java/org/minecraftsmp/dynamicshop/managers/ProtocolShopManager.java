@@ -9,6 +9,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 import org.minecraftsmp.dynamicshop.DynamicShop;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 
 import java.util.HashMap;
 import java.util.List;
@@ -49,8 +50,7 @@ public class ProtocolShopManager {
         // Size must be multiple of 9
         int rows = Math.max(3, Math.min(6, (size + 8) / 9));
         Inventory inv = Bukkit.createInventory(null, rows * 9,
-                net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection()
-                        .deserialize(title));
+                MessageManager.parseComponent(title, p));
 
         // Register as shop inventory
         shopInventories.put(inv, true);

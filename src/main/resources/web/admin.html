@@ -971,6 +971,11 @@
                         <button class="btn btn-primary" onclick="setBulkStock()">Set All Stock</button>
                     </div>
                 </div>
+                <div class="card">
+                    <h2>🔄 Plugin Reload</h2>
+                    <p style="color:var(--text-secondary); font-size:14px; margin-bottom:16px;">Reload all plugin configuration (config.yml, messages.yml, items.yml). Equivalent to <code style="background:var(--bg-input);padding:2px 6px;border-radius:4px;">/shopadmin reload</code>.</p>
+                    <button class="btn btn-primary" onclick="reloadPlugin()">🔄 Reload Plugin</button>
+                </div>
             </div>
 
             <!-- ═══ Permissions Tab ═══ -->
@@ -1028,6 +1033,10 @@
     <div class="modal-overlay" id="editModal">
         <div class="modal">
             <h2><img id="modalImg" src=""><span id="modalTitle">Edit Item</span></h2>
+            <div class="field-group">
+                <label>Category</label>
+                <select id="editCategory" style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text-primary);font-size:14px;font-family:inherit;"></select>
+            </div>
             <div class="field-group"><label>Base Price</label><input type="number" id="editBasePrice" step="0.01"></div>
             <div class="field-group"><label>Current Stock</label><input type="number" id="editStock" step="1"></div>
             <div class="field-group"><label>Shortage Rate (%/negative unit)</label><input type="number"
@@ -1058,10 +1067,13 @@
                             class="slider"></span></label>
                 </div>
             </div>
-            <div class="btn-group">
-                <button class="btn btn-primary" onclick="saveItem()">💾 Save</button>
-                <button class="btn btn-danger btn-sm" onclick="resetItemShortage()">Reset Shortage</button>
-                <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+            <div class="btn-group" style="justify-content:space-between;">
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-primary" onclick="saveItem()">💾 Save</button>
+                    <button class="btn btn-danger btn-sm" onclick="resetItemShortage()">Reset Shortage</button>
+                    <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+                </div>
+                <button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:var(--danger);border:1px solid rgba(239,68,68,0.3);" onclick="removeItem()">🗑️ Remove</button>
             </div>
         </div>
     </div>
@@ -1525,6 +1537,19 @@
             editingItem = item;
             document.getElementById('modalImg').src = item.imageUrl;
             document.getElementById('modalTitle').textContent = item.displayName;
+
+            // Populate category dropdown
+            const catSel = document.getElementById('editCategory');
+            catSel.innerHTML = '';
+            allCategories.forEach(c => {
+                if (c.id === 'PERMISSIONS' || c.id === 'SERVER_SHOP' || c.id === 'PLAYER_SHOPS') return;
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.displayName + ' (' + c.id + ')';
+                if (item.category === c.id) opt.selected = true;
+                catSel.appendChild(opt);
+            });
+
             document.getElementById('editBasePrice').value = item.basePrice;
             document.getElementById('editStock').value = item.stock.toFixed(0);
             document.getElementById('editStockRate').value = item.stockRate;
@@ -1610,6 +1635,7 @@
 
         async function saveItem() {
             if (!editingItem) return;
+            const selectedCategory = document.getElementById('editCategory').value;
             const body = {
                 basePrice: +document.getElementById('editBasePrice').value,
                 stock: +document.getElementById('editStock').value,
@@ -1619,7 +1645,8 @@
                 shortageHours: +document.getElementById('editShortageHours').value,
                 buyDisabled: document.getElementById('editBuyDisabled').checked,
                 sellDisabled: document.getElementById('editSellDisabled').checked,
-                disabled: document.getElementById('editDisabled').checked
+                disabled: document.getElementById('editDisabled').checked,
+                category: selectedCategory
             };
             try {
                 await apiFetch('/api/admin/item/' + editingItem.item, { method: 'POST', body: JSON.stringify(body) });
@@ -1768,6 +1795,28 @@
             el.textContent = msg;
             document.getElementById('toasts').appendChild(el);
             setTimeout(() => el.remove(), 3500);
+        }
+
+        // ─── Remove Item ───
+        async function removeItem() {
+            if (!editingItem) return;
+            if (!confirm('Are you sure you want to remove "' + editingItem.displayName + '" from the shop?\n\nThis will disable the item. To re-add it, use /shopadmin add or the Add Item button.')) return;
+            try {
+                await apiFetch('/api/admin/item/' + editingItem.item, { method: 'DELETE' });
+                toast('Removed: ' + editingItem.displayName, 'success');
+                closeModal();
+                setTimeout(loadCategories, 500);
+            } catch (e) { toast('Failed to remove item', 'error'); }
+        }
+
+        // ─── Reload Plugin ───
+        async function reloadPlugin() {
+            if (!confirm('Reload the plugin? This will re-read config.yml, messages.yml, and items.yml.')) return;
+            try {
+                await apiFetch('/api/admin/reload', { method: 'POST' });
+                toast('Plugin reloaded!', 'success');
+                setTimeout(() => { loadCategories(); loadConfig(); }, 500);
+            } catch (e) { toast('Failed to reload', 'error'); }
         }
 
         // ─── Enter key support ───

@@ -9,7 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -24,7 +24,14 @@ public class PlayerShopViewGUI {
     private final Inventory inventory;
     private int currentPage = 0;
 
-    private static final int ITEMS_PER_PAGE = 45; // 5 rows of 9
+    // Item slots: rows 1-4, columns 1-7 (7 items per row, 4 rows = 28 items)
+    private static final int[] ITEM_SLOTS = {
+        10, 11, 12, 13, 14, 15, 16,  // row 1
+        19, 20, 21, 22, 23, 24, 25,  // row 2
+        28, 29, 30, 31, 32, 33, 34,  // row 3
+        37, 38, 39, 40, 41, 42, 43   // row 4
+    };
+    private static final int ITEMS_PER_PAGE = ITEM_SLOTS.length; // 28
     private static final int GUI_SIZE = 54; // 6 rows
 
     public PlayerShopViewGUI(DynamicShop plugin, Player viewer, UUID shopOwnerId) {
@@ -33,12 +40,13 @@ public class PlayerShopViewGUI {
         this.shopOwnerId = shopOwnerId;
         this.shopOwnerName = plugin.getPlayerShopManager().getPlayerName(shopOwnerId);
 
-        String title = viewer.getUniqueId().equals(shopOwnerId)
-                ? "§6§lYour Shop"
-                : "§6§l" + shopOwnerName + "'s Shop";
+        java.util.Map<String, String> titlePlaceholders = new java.util.HashMap<>();
+        titlePlaceholders.put("player", viewer.getUniqueId().equals(shopOwnerId) ? "Your" : shopOwnerName);
+        String title = plugin.getMessageManager().getMessage("player-shop-view-title", titlePlaceholders);
+        if (title == null) title = "§6§l" + shopOwnerName + "'s Shop";
 
         this.inventory = Bukkit.createInventory(null, GUI_SIZE,
-                LegacyComponentSerializer.legacySection().deserialize(title));
+                MessageManager.parseComponent(title, viewer));
 
         refreshPage();
     }
@@ -71,6 +79,18 @@ public class PlayerShopViewGUI {
     private void refreshPage() {
         inventory.clear();
 
+        // Fill borders: top row + side columns
+        ItemStack filler = org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
+        // Top row
+        for (int col = 0; col < 9; col++) {
+            inventory.setItem(col, filler);
+        }
+        // Side columns (rows 1-4)
+        for (int row = 1; row < 5; row++) {
+            inventory.setItem(row * 9, filler);     // left
+            inventory.setItem(row * 9 + 8, filler); // right
+        }
+
         PlayerShopManager manager = plugin.getPlayerShopManager();
         List<PlayerShopListing> listings = manager.getListings(shopOwnerId);
 
@@ -79,11 +99,11 @@ public class PlayerShopViewGUI {
 
         boolean isOwnShop = viewer.getUniqueId().equals(shopOwnerId);
 
-        // Display items
+        // Display items in bordered slots
         for (int i = startIndex; i < endIndex; i++) {
             PlayerShopListing listing = listings.get(i);
             ItemStack displayItem = createDisplayItem(listing, isOwnShop);
-            inventory.setItem(i - startIndex, displayItem);
+            inventory.setItem(ITEM_SLOTS[i - startIndex], displayItem);
         }
 
         // Navigation items at bottom row
@@ -107,7 +127,7 @@ public class PlayerShopViewGUI {
             if (!meta.hasDisplayName()) {
                 String materialName = displayItem.getType().toString().replace("_", " ");
                 materialName = capitalizeWords(materialName);
-                meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§f" + materialName));
+                meta.displayName(MessageManager.parseComponent("§f" + materialName));
             }
             // If it has a custom name, keep it exactly as-is!
 
@@ -117,10 +137,9 @@ public class PlayerShopViewGUI {
                     : new ArrayList<>();
 
             // Add shop info AFTER existing lore (preserve original lore)
-            lore.add(LegacyComponentSerializer.legacySection().deserialize(""));
-            lore.add(LegacyComponentSerializer.legacySection()
-                    .deserialize("§7Price: §e$" + String.format("%.2f", listing.getPrice())));
-            lore.add(LegacyComponentSerializer.legacySection().deserialize("§7Amount: §f" + displayItem.getAmount()));
+            lore.add(MessageManager.parseComponent(""));
+            lore.add(MessageManager.parseComponent("§7Price: §e$" + String.format("%.2f", listing.getPrice())));
+            lore.add(MessageManager.parseComponent("§7Amount: §f" + displayItem.getAmount()));
 
             // Show durability if applicable (using modern Damageable API)
             if (displayItem.getType().getMaxDurability() > 0 && meta instanceof org.bukkit.inventory.meta.Damageable) {
@@ -128,27 +147,26 @@ public class PlayerShopViewGUI {
                 int damage = ((org.bukkit.inventory.meta.Damageable) meta).getDamage();
                 int remaining = maxDurability - damage;
                 int percent = (int) ((remaining / (double) maxDurability) * 100);
-                lore.add(LegacyComponentSerializer.legacySection()
-                        .deserialize("§7Durability: §f" + remaining + "/" + maxDurability + " §7(" + percent + "%)"));
+                lore.add(MessageManager.parseComponent(
+                        "§7Durability: §f" + remaining + "/" + maxDurability + " §7(" + percent + "%)"));
             }
 
             // Show enchantments count if present
             if (meta.hasEnchants()) {
-                lore.add(LegacyComponentSerializer.legacySection()
-                        .deserialize("§7Enchantments: §b" + meta.getEnchants().size()));
+                lore.add(MessageManager.parseComponent(
+                        "§7Enchantments: §b" + meta.getEnchants().size()));
             }
 
             // Show listing time
             SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, HH:mm");
-            lore.add(LegacyComponentSerializer.legacySection()
-                    .deserialize("§7Listed: §f" + sdf.format(new Date(listing.getListedTime()))));
+            lore.add(MessageManager.parseComponent("§7Listed: §f" + sdf.format(new Date(listing.getListedTime()))));
 
-            lore.add(LegacyComponentSerializer.legacySection().deserialize(""));
+            lore.add(MessageManager.parseComponent(""));
             if (isOwnShop) {
-                lore.add(LegacyComponentSerializer.legacySection().deserialize("§a§lYour Listing"));
-                lore.add(LegacyComponentSerializer.legacySection().deserialize("§eClick to reclaim"));
+                lore.add(MessageManager.parseComponent("§a§lYour Listing"));
+                lore.add(MessageManager.parseComponent("§eClick to reclaim"));
             } else {
-                lore.add(LegacyComponentSerializer.legacySection().deserialize("§eClick to purchase"));
+                lore.add(MessageManager.parseComponent("§eClick to purchase"));
             }
 
             meta.lore(lore);
@@ -185,7 +203,7 @@ public class PlayerShopViewGUI {
             ItemStack prevPage = new ItemStack(Material.ARROW);
             ItemMeta prevMeta = prevPage.getItemMeta();
             if (prevMeta != null) {
-                prevMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§e◀ Previous Page"));
+                prevMeta.displayName(MessageManager.parseComponent("§e◀ Previous Page"));
                 prevPage.setItemMeta(prevMeta);
             }
             inventory.setItem(48, prevPage);
@@ -195,12 +213,11 @@ public class PlayerShopViewGUI {
         ItemStack pageInfo = new ItemStack(Material.PAPER);
         ItemMeta pageInfoMeta = pageInfo.getItemMeta();
         if (pageInfoMeta != null) {
-            pageInfoMeta.displayName(LegacyComponentSerializer.legacySection()
-                    .deserialize("§7Page " + (currentPage + 1) + " / " + (maxPage + 1)));
+            pageInfoMeta.displayName(MessageManager.parseComponent("§7Page " + (currentPage + 1) + " / " + (maxPage + 1)));
             List<String> lore = new ArrayList<>();
             lore.add("§7Total listings: §f" + totalItems);
             pageInfoMeta
-                    .lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+                    .lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             pageInfo.setItemMeta(pageInfoMeta);
         }
         inventory.setItem(49, pageInfo);
@@ -210,7 +227,7 @@ public class PlayerShopViewGUI {
             ItemStack nextPage = new ItemStack(Material.ARROW);
             ItemMeta nextMeta = nextPage.getItemMeta();
             if (nextMeta != null) {
-                nextMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§eNext Page ▶"));
+                nextMeta.displayName(MessageManager.parseComponent("§eNext Page ▶"));
                 nextPage.setItemMeta(nextMeta);
             }
             inventory.setItem(50, nextPage);
@@ -220,7 +237,7 @@ public class PlayerShopViewGUI {
         ItemStack back = new ItemStack(Material.BARRIER);
         ItemMeta backMeta = back.getItemMeta();
         if (backMeta != null) {
-            backMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§c◀ Back to Shops"));
+            backMeta.displayName(MessageManager.parseComponent("§c◀ Back to Shops"));
             back.setItemMeta(backMeta);
         }
         inventory.setItem(45, back);
@@ -229,15 +246,14 @@ public class PlayerShopViewGUI {
         ItemStack stats = new ItemStack(isOwnShop ? Material.EMERALD : Material.GOLD_INGOT);
         ItemMeta statsMeta = stats.getItemMeta();
         if (statsMeta != null) {
-            statsMeta.displayName(LegacyComponentSerializer.legacySection()
-                    .deserialize(isOwnShop ? "§a§lYour Shop" : "§e§l" + shopOwnerName));
+            statsMeta.displayName(MessageManager.parseComponent(isOwnShop ? "§a§lYour Shop" : "§e§l" + shopOwnerName));
             List<String> lore = new ArrayList<>();
             lore.add("§7Total items: §f" + totalItems);
             if (isOwnShop) {
                 lore.add("");
                 lore.add("§7Click items to reclaim them");
             }
-            statsMeta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            statsMeta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             stats.setItemMeta(statsMeta);
         }
         inventory.setItem(53, stats);
@@ -247,12 +263,18 @@ public class PlayerShopViewGUI {
      * Get the listing at the clicked slot
      */
     public PlayerShopListing getListingAtSlot(int slot) {
-        if (slot >= ITEMS_PER_PAGE) {
-            return null;
+        // Convert raw slot to item index
+        int itemIndex = -1;
+        for (int i = 0; i < ITEM_SLOTS.length; i++) {
+            if (ITEM_SLOTS[i] == slot) {
+                itemIndex = i;
+                break;
+            }
         }
+        if (itemIndex < 0) return null;
 
         List<PlayerShopListing> listings = plugin.getPlayerShopManager().getListings(shopOwnerId);
-        int actualIndex = currentPage * ITEMS_PER_PAGE + slot;
+        int actualIndex = currentPage * ITEMS_PER_PAGE + itemIndex;
 
         if (actualIndex >= 0 && actualIndex < listings.size()) {
             return listings.get(actualIndex);

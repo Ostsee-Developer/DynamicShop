@@ -156,7 +156,7 @@ function renderLeaderboard(data) {
     }
 
     const valueKey = currentLeaderboard === 'traders' ? 'trades' :
-        currentLeaderboard === 'spenders' ? 'spent' : 'netProfit';
+        currentLeaderboard === 'spenders' ? 'spent' : 'earned';
 
     container.innerHTML = data.map((entry, i) => {
         const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';

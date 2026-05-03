@@ -57,14 +57,15 @@ public class PlayerShopListener implements Listener {
 
         Player player = (Player) event.getPlayer();
         UUID playerId = player.getUniqueId();
-        String title = PlainTextComponentSerializer.plainText().serialize(event.getView().title());
 
-        // Only remove the specific GUI that's closing
-        // Note: PlainTextComponentSerializer strips formatting, so compare against
-        // plain text
-        if (title.equals("Player Shops")) {
+        // Check if the closing inventory matches our tracked GUIs
+        PlayerShopBrowserGUI browserGUI = openBrowserGUIs.get(playerId);
+        if (browserGUI != null && event.getInventory().equals(browserGUI.getInventory())) {
             openBrowserGUIs.remove(playerId);
-        } else if (title.contains("'s Shop") || title.equals("Your Shop")) {
+        }
+
+        PlayerShopViewGUI viewGUI = openShopViewGUIs.get(playerId);
+        if (viewGUI != null && event.getInventory().equals(viewGUI.getInventory())) {
             openShopViewGUIs.remove(playerId);
         }
     }
@@ -79,19 +80,17 @@ public class PlayerShopListener implements Listener {
         }
 
         Player player = (Player) event.getWhoClicked();
-        String title = PlainTextComponentSerializer.plainText().serialize(event.getView().title());
+        UUID playerId = player.getUniqueId();
 
         // Handle Player Shops Browser
-        // Note: PlainTextComponentSerializer strips formatting, so compare against
-        // plain text
-        if (title.equals("Player Shops")) {
+        if (openBrowserGUIs.containsKey(playerId)) {
             event.setCancelled(true);
             handleBrowserClick(player, event.getRawSlot());
             return;
         }
 
         // Handle Individual Player Shop View
-        if (title.contains("'s Shop") || title.equals("Your Shop")) {
+        if (openShopViewGUIs.containsKey(playerId)) {
             event.setCancelled(true);
             handleShopViewClick(player, event.getRawSlot());
         }

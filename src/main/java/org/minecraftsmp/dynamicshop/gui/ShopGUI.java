@@ -10,12 +10,13 @@ import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
 import org.minecraftsmp.dynamicshop.category.SpecialShopItem;
 import org.minecraftsmp.dynamicshop.managers.ItemsAdderWrapper;
+import org.minecraftsmp.dynamicshop.managers.NexoWrapper;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
 import org.minecraftsmp.dynamicshop.managers.ProtocolShopManager;
 import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import org.minecraftsmp.dynamicshop.managers.ConfigCacheManager;
 import org.minecraftsmp.dynamicshop.util.ShopItemBuilder;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -28,6 +29,7 @@ public class ShopGUI {
     private final int size;
     private final ProtocolShopManager pm;
     private final int itemsPerPage;
+    private final int[] itemSlots; // Maps item index -> inventory slot (inner grid only)
     private Inventory inventory; // Store the inventory reference
 
     private List<Material> allItems; // MASTER list of items in this category
@@ -50,7 +52,18 @@ public class ShopGUI {
 
         this.size = plugin.getConfig().getInt("gui.shop_menu_size", 54);
         this.pm = plugin.getProtocolShopManager();
-        this.itemsPerPage = size - 9; // Reserve bottom row for navigation
+
+        // Build item slot list: inner columns (1-7) on rows 1 through (totalRows-2)
+        // Row 0 = top border, last row = navigation, cols 0 & 8 = side borders
+        int totalRows = size / 9;
+        java.util.List<Integer> slots = new java.util.ArrayList<>();
+        for (int row = 1; row < totalRows - 1; row++) {
+            for (int col = 1; col <= 7; col++) {
+                slots.add(row * 9 + col);
+            }
+        }
+        this.itemSlots = slots.stream().mapToInt(Integer::intValue).toArray();
+        this.itemsPerPage = itemSlots.length;
 
         // Load items based on category type
         if (category == ItemCategory.PERMISSIONS || category == ItemCategory.SERVER_SHOP) {
@@ -82,8 +95,13 @@ public class ShopGUI {
         plugin.getShopListener().unregisterCategory(player);
         plugin.getShopListener().unregisterShop(player); // just in case
 
-        inventory = pm.createVirtualInventory(player, size,
-                org.minecraftsmp.dynamicshop.managers.CategoryConfigManager.getDisplayName(category));
+        // Build the title using the message key (supports Nexo glyphs in messages_nexo.yml)
+        java.util.Map<String, String> titlePlaceholders = new java.util.HashMap<>();
+        titlePlaceholders.put("category", org.minecraftsmp.dynamicshop.managers.CategoryConfigManager.getDisplayName(category));
+        String title = plugin.getMessageManager().getMessage("shop-gui-title", titlePlaceholders);
+        if (title == null) title = org.minecraftsmp.dynamicshop.managers.CategoryConfigManager.getDisplayName(category);
+
+        inventory = pm.createVirtualInventory(player, size, title);
         render();
         player.openInventory(inventory);
 
@@ -100,32 +118,50 @@ public class ShopGUI {
      * Renders the entire GUI page — all items + navigation bar.
      */
     public void render() {
-        // Clear upper slots
-        for (int i = 0; i < itemsPerPage; i++) {
+        // Clear all non-navigation slots (top row + border columns + item area)
+        int navRow = size - 9;
+        for (int i = 0; i < navRow; i++) {
             pm.sendSlot(inventory, i, null);
+        }
+
+        // Fill border slots with filler (top row + side columns)
+        ItemStack filler = org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
+        // Top row (slot 4 = home button aligned with the Spectra texture house icon)
+        for (int col = 0; col < 9; col++) {
+            if (col == 4 && !commandOpened) {
+                pm.sendSlot(inventory, col, new ItemStack(Material.AIR));
+            } else {
+                pm.sendSlot(inventory, col, filler);
+            }
+        }
+        // Side columns (rows 1 through navRow-1)
+        int totalRows = size / 9;
+        for (int row = 1; row < totalRows - 1; row++) {
+            pm.sendSlot(inventory, row * 9, filler);     // left column
+            pm.sendSlot(inventory, row * 9 + 8, filler); // right column
         }
 
         // Render based on category type
         if (category == ItemCategory.PERMISSIONS || category == ItemCategory.SERVER_SHOP) {
-            // Render special items
+            // Render special items into mapped slots
             int start = page * itemsPerPage;
             int end = Math.min(start + itemsPerPage, specialItems.size());
 
             for (int i = start; i < end; i++) {
                 SpecialShopItem specialItem = specialItems.get(i);
-                int slot = i - start;
+                int slot = itemSlots[i - start];
 
                 ItemStack displayItem = buildSpecialShopItem(specialItem);
                 pm.sendSlot(inventory, slot, displayItem);
             }
         } else {
-            // Render regular items from displayItems (filtered)
+            // Render regular items into mapped slots
             int start = page * itemsPerPage;
             int end = Math.min(start + itemsPerPage, displayItems.size());
 
             for (int i = start; i < end; i++) {
                 Material mat = displayItems.get(i);
-                int slot = i - start;
+                int slot = itemSlots[i - start];
 
                 ItemStack displayItem = buildShopItem(mat);
                 pm.sendSlot(inventory, slot, displayItem);
@@ -163,10 +199,7 @@ public class ShopGUI {
     public void toggleHideOutOfStock() {
         this.hideOutOfStock = !this.hideOutOfStock;
         updateDisplayItems();
-        // Clear slots first to prevent ghost items if list shrank
-        for (int i = 0; i < itemsPerPage; i++) {
-            pm.sendSlot(inventory, i, null);
-        }
+        // Re-render (render() clears all non-nav slots first)
         render();
     }
 
@@ -178,6 +211,8 @@ public class ShopGUI {
         ItemStack item = null;
         if ("itemsadder".equalsIgnoreCase(specialItem.getDeliveryMethod()) && specialItem.getNbt() != null) {
             item = ItemsAdderWrapper.getItem(specialItem.getNbt());
+        } else if ("nexo".equalsIgnoreCase(specialItem.getDeliveryMethod()) && specialItem.getNbt() != null) {
+            item = NexoWrapper.getItem(specialItem.getNbt());
         }
 
         if (item == null) {
@@ -189,7 +224,7 @@ public class ShopGUI {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(
-                    LegacyComponentSerializer.legacySection().deserialize("§e§l" + specialItem.getDisplayName()));
+                    MessageManager.parseComponent("§e§l" + specialItem.getDisplayName()));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7───────────────────");
@@ -218,7 +253,7 @@ public class ShopGUI {
             lore.add("§7───────────────────");
             lore.add("§eLeft-click to BUY");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
 
@@ -240,12 +275,12 @@ public class ShopGUI {
             item = new ItemStack(Material.BARRIER);
             ItemMeta meta = item.getItemMeta();
             if (meta != null) {
-                meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§c§lINVALID ITEM"));
+                meta.displayName(MessageManager.parseComponent("§c§lINVALID ITEM"));
                 List<String> lore = new ArrayList<>();
                 lore.add("§7Material: " + mat);
                 lore.add("§cThis item is invalid");
                 lore.add("§cin this version.");
-                meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+                meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
                 item.setItemMeta(meta);
             }
             return item;
@@ -253,7 +288,7 @@ public class ShopGUI {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(
-                    LegacyComponentSerializer.legacySection().deserialize("§e§l" + mat.name().replace("_", " ")));
+                    MessageManager.parseComponent("§e§l" + mat.name().replace("_", " ")));
 
             List<String> lore = new ArrayList<>();
 
@@ -295,10 +330,11 @@ public class ShopGUI {
 
                     java.util.Map<String, String> percentPlaceholders = new java.util.HashMap<>();
                     percentPlaceholders.put("percent", String.format("%,.0f", percentIncrease) + (capped ? " (MAX)" : ""));
+                    percentPlaceholders.put("hourly_rate", String.format("%.1f", ConfigCacheManager.hourlyIncreasePercent));
                     MessageManager.addLoreIfNotEmpty(lore,
                             plugin.getMessageManager().getMessage("shop-lore-price-increase", percentPlaceholders));
                     MessageManager.addLoreIfNotEmpty(lore,
-                            plugin.getMessageManager().getMessage("shop-lore-price-increase-note"));
+                            plugin.getMessageManager().getMessage("shop-lore-price-increase-note", percentPlaceholders));
                 } else if (stock == 0) {
                     MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("lore-out-of-stock"));
 
@@ -313,10 +349,11 @@ public class ShopGUI {
 
                     java.util.Map<String, String> percentPlaceholders = new java.util.HashMap<>();
                     percentPlaceholders.put("percent", String.format("%,.0f", percentIncrease) + (capped ? " (MAX)" : ""));
+                    percentPlaceholders.put("hourly_rate", String.format("%.1f", ConfigCacheManager.hourlyIncreasePercent));
                     MessageManager.addLoreIfNotEmpty(lore,
                             plugin.getMessageManager().getMessage("shop-lore-price-increase", percentPlaceholders));
                     MessageManager.addLoreIfNotEmpty(lore,
-                            plugin.getMessageManager().getMessage("shop-lore-price-increase-note"));
+                            plugin.getMessageManager().getMessage("shop-lore-price-increase-note", percentPlaceholders));
                 } else {
                     java.util.Map<String, String> stockPlaceholders = new java.util.HashMap<>();
                     stockPlaceholders.put("stock", String.format("%.0f", stock));
@@ -341,7 +378,7 @@ public class ShopGUI {
                         plugin.getMessageManager().getMessage("shop-lore-shift-right-click-sell"));
             }
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -362,6 +399,13 @@ public class ShopGUI {
     private void renderNavigation() {
         int navRow = size - 9; // Bottom row starts here
 
+        ItemStack filler = org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
+
+        // Fill unused nav slots with filler first
+        for (int i = 0; i < 9; i++) {
+            pm.sendSlot(inventory, navRow + i, filler);
+        }
+
         // Helper to get strings safely
         String prevName = plugin.getMessageManager().getMessage("gui-nav-previous");
         if (prevName == null) prevName = "§ePrevious Page";
@@ -369,7 +413,7 @@ public class ShopGUI {
         if (prevLore == null) prevLore = page > 0 ? "§7Click to go back" : "§cNo previous page";
         
         // Left Arrow - Previous Page
-        ItemStack prevPage = ShopItemBuilder.navItem(prevName, Material.ARROW, prevLore);
+        ItemStack prevPage = ShopItemBuilder.navItemNexo(prevName, "shop_back_button", Material.ARROW, prevLore);
         pm.sendSlot(inventory, navRow + 0, prevPage);
 
         String nextName = plugin.getMessageManager().getMessage("gui-nav-next");
@@ -378,17 +422,11 @@ public class ShopGUI {
         if (nextLore == null) nextLore = page < maxPage ? "§7Click to go forward" : "§cNo next page";
         
         // Right Arrow - Next Page
-        ItemStack nextPage = ShopItemBuilder.navItem(nextName, Material.ARROW, nextLore);
+        ItemStack nextPage = ShopItemBuilder.navItemNexo(nextName, "shop_next_button", Material.ARROW, nextLore);
         pm.sendSlot(inventory, navRow + 8, nextPage);
 
         // X - Back to Categories (Red X) — hidden when opened via command
         if (commandOpened) {
-            ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-            ItemMeta fillerMeta = filler.getItemMeta();
-            if (fillerMeta != null) {
-                fillerMeta.displayName(LegacyComponentSerializer.legacySection().deserialize(" "));
-                filler.setItemMeta(fillerMeta);
-            }
             pm.sendSlot(inventory, navRow + 4, filler);
         } else {
             String backName = plugin.getMessageManager().getMessage("gui-nav-back");
@@ -396,7 +434,7 @@ public class ShopGUI {
             String backLore = plugin.getMessageManager().getMessage("gui-nav-back-lore");
             if (backLore == null) backLore = "§7Return to category selection";
             
-            ItemStack backToCategories = ShopItemBuilder.navItem(backName, Material.BARRIER, backLore);
+            ItemStack backToCategories = ShopItemBuilder.navItemNexo(backName, "shop_categories_button", Material.BARRIER, backLore);
             pm.sendSlot(inventory, navRow + 4, backToCategories);
         }
 
@@ -407,7 +445,7 @@ public class ShopGUI {
             String searchLore = plugin.getMessageManager().getMessage("gui-nav-search-lore");
             if (searchLore == null) searchLore = "§7Open search menu";
             
-            ItemStack search = ShopItemBuilder.navItem(searchName, Material.COMPASS, searchLore);
+            ItemStack search = ShopItemBuilder.navItemNexo(searchName, "shop_search_button", Material.COMPASS, searchLore);
             pm.sendSlot(inventory, navRow + 3, search);
         }
 
@@ -427,7 +465,7 @@ public class ShopGUI {
         String pageLoreStr = plugin.getMessageManager().getMessage("gui-nav-page-lore", pagePlaceholders);
         if (pageLoreStr == null) pageLoreStr = "§7Total items: §e" + totalItems;
         
-        ItemStack pageInfo = ShopItemBuilder.navItem(pageName, Material.PAPER, pageLoreStr);
+        ItemStack pageInfo = ShopItemBuilder.navItemNexo(pageName, "shop_page_button", Material.PAPER, pageLoreStr);
         pm.sendSlot(inventory, navRow + 5, pageInfo);
 
         // Filter Toggle (Hopper)
@@ -443,7 +481,7 @@ public class ShopGUI {
             String filterLoreStr = plugin.getMessageManager().getMessage("gui-nav-filter-lore");
             if (filterLoreStr == null) filterLoreStr = "§7Click to toggle";
             
-            ItemStack filterItem = ShopItemBuilder.navItem(filterName, Material.HOPPER, filterState, filterLoreStr);
+            ItemStack filterItem = ShopItemBuilder.navItemNexo(filterName, "shop_filter_button", Material.HOPPER, filterState, filterLoreStr);
             pm.sendSlot(inventory, navRow + 2, filterItem);
         }
     }
@@ -489,6 +527,30 @@ public class ShopGUI {
     }
 
     /**
+     * Check if a slot is a border/filler slot (not an item slot and not navigation)
+     */
+    public boolean isBorderSlot(int rawSlot) {
+        if (isNavigationSlot(rawSlot)) return false;
+        for (int itemSlot : itemSlots) {
+            if (itemSlot == rawSlot) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Convert a raw inventory slot to an item index within the current page.
+     * Returns -1 if the slot is not a valid item slot.
+     */
+    private int slotToItemIndex(int rawSlot) {
+        for (int i = 0; i < itemSlots.length; i++) {
+            if (itemSlots[i] == rawSlot) {
+                return (page * itemsPerPage) + i;
+            }
+        }
+        return -1;
+    }
+
+    /**
      * Returns the Material that corresponds to the clicked slot (for regular
      * items).
      * IMPORTANT: Because this is a virtual GUI, we compute it instead of reading
@@ -500,7 +562,7 @@ public class ShopGUI {
         if (category == ItemCategory.PERMISSIONS || category == ItemCategory.SERVER_SHOP)
             return null;
 
-        int index = (page * itemsPerPage) + clickedSlot;
+        int index = slotToItemIndex(clickedSlot);
 
         if (index < 0 || index >= displayItems.size())
             return null;
@@ -517,7 +579,7 @@ public class ShopGUI {
         if (category != ItemCategory.PERMISSIONS && category != ItemCategory.SERVER_SHOP)
             return null;
 
-        int index = (page * itemsPerPage) + clickedSlot;
+        int index = slotToItemIndex(clickedSlot);
 
         if (index < 0 || index >= specialItems.size())
             return null;

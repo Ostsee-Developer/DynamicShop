@@ -18,6 +18,7 @@ import org.minecraftsmp.dynamicshop.gui.ItemActionGUI;
 import org.minecraftsmp.dynamicshop.gui.ShopGUI;
 import org.minecraftsmp.dynamicshop.managers.CategoryConfigManager;
 import org.minecraftsmp.dynamicshop.managers.ItemsAdderWrapper;
+import org.minecraftsmp.dynamicshop.managers.NexoWrapper;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
 import org.minecraftsmp.dynamicshop.util.BedrockUtil;
 
@@ -436,27 +437,29 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                     if (Bukkit.getPluginManager().getPlugin("ItemsAdder") != null) {
                         iaId = ItemsAdderWrapper.getCustomItemId(held);
                     }
+                    String nexoId = null;
+                    if (Bukkit.getPluginManager().getPlugin("Nexo") != null) {
+                        nexoId = NexoWrapper.getCustomItemId(held);
+                    }
 
-                    if (iaId != null) {
-                        // Redirect to server-shop logic if it's an IA item
-                        // Because 'item' mode requires Enum Material, we can't save IA item as normal
-                        // shop item easily
-                        // unless we map it to server-shop item.
-                        // Suggest current command isn't best for custom items, OR automatically switch
-                        // to server-shop mode?
-                        // Let's print a message for now that they should use 'add server-shop' or just
-                        // auto-create it as server-shop.
-
-                        // Better approach for UX: Auto-redirect to server-shop creation
-                        String id = iaId.replace(":", "_");
+                    if (iaId != null || nexoId != null) {
+                        String id = (iaId != null ? iaId : nexoId).replace(":", "_");
+                        String customId = (iaId != null ? iaId : nexoId);
 
                         // Delegate to addServerShop logic
-                        plugin.getSpecialShopManager().addServerShopItem(id, iaId, price, id, mat, null, true);
+                        plugin.getSpecialShopManager().addServerShopItem(id, customId, price, id, mat, null, true);
+                        
+                        // Update the config delivery method correctly
+                        String basePath = "special_items." + id;
+                        plugin.getConfig().set(basePath + ".delivery_method", iaId != null ? "itemsadder" : "nexo");
+                        plugin.getConfig().set(basePath + ".nbt", customId);
+                        plugin.saveConfig();
+                        plugin.getSpecialShopManager().reload(); // Reload to apply delivery method
 
                         Map<String, String> placeholders = new HashMap<>();
                         placeholders.put("item", id);
                         placeholders.put("price", String.valueOf(price));
-                        placeholders.put("category", "Server items"); // IA items are virtually server items
+                        placeholders.put("category", "Server items");
 
                         sender.sendMessage(plugin.getMessageManager().getMessageWithPrefix(
                                 "admin-server-shop-added", placeholders));
@@ -610,7 +613,7 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                     }
 
                     // Register base server-shop item
-                    // Auto-configure as ItemsAdder item
+                    // Auto-configure as ItemsAdder/Nexo item if applicable
                     plugin.getSpecialShopManager().addServerShopItem(id, id, price, id, displayMaterial, requiredPerm,
                             true); // Temporary step
 

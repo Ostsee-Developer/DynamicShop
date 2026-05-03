@@ -9,6 +9,10 @@ import org.minecraftsmp.dynamicshop.category.ItemCategory;
 import org.minecraftsmp.dynamicshop.category.SpecialShopItem;
 import org.minecraftsmp.dynamicshop.transactions.Transaction;
 
+import org.minecraftsmp.dynamicshop.managers.ItemsAdderWrapper;
+import org.minecraftsmp.dynamicshop.managers.NexoWrapper;
+import org.minecraftsmp.dynamicshop.transactions.Transaction;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -706,6 +710,32 @@ public class SpecialShopManager {
                 if (customStack == null) {
                     plugin.getLogger().warning("[DynamicShop] Could not find ItemsAdder item: " + iaId);
                     player.sendMessage("§cError: Custom item not found: " + iaId);
+                    return false;
+                }
+
+                customStack.setAmount(Math.max(1, item.getAmount()));
+                player.getInventory().addItem(customStack);
+                return true;
+            }
+
+            // 6. NEXO DELIVERY
+            if (deliveryMethod.equalsIgnoreCase("nexo")) {
+                String nexoId = item.getNbt(); // NBT field holds the Id
+                if (nexoId == null || nexoId.isEmpty()) {
+                    plugin.getLogger().warning(
+                            "[DynamicShop] Special item " + item.getId() + " has no ID (nbt) for Nexo delivery.");
+                    return false;
+                }
+
+                if (Bukkit.getPluginManager().getPlugin("Nexo") == null) {
+                    player.sendMessage("§cError: Nexo plugin is missing!");
+                    return false;
+                }
+
+                ItemStack customStack = NexoWrapper.getItem(nexoId);
+                if (customStack == null) {
+                    plugin.getLogger().warning("[DynamicShop] Could not find Nexo item: " + nexoId);
+                    player.sendMessage("§cError: Custom item not found: " + nexoId);
                     return false;
                 }
 

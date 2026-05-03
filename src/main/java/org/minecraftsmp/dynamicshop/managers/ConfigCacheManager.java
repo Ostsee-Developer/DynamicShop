@@ -32,6 +32,8 @@ public class ConfigCacheManager {
 
     // GUI SETTINGS
     public static int shopMenuSize = 54;
+    public static String fillerMaterialStr = "AIR";
+    public static boolean useDialogGui = false;
 
     // WEB SERVER SETTINGS
     public static boolean webServerEnabled = true;
@@ -100,6 +102,41 @@ public class ConfigCacheManager {
 
     private static void loadGuiSettings() {
         shopMenuSize = plugin.getConfig().getInt("gui.shop_menu_size", 54);
+        fillerMaterialStr = plugin.getConfig().getString("gui.filler_material", "AIR");
+        useDialogGui = plugin.getConfig().getBoolean("gui.use_dialog_gui", false);
+    }
+
+    /**
+     * Get the filler item stack based on config.
+     */
+    public static org.bukkit.inventory.ItemStack getFillerItem() {
+        if (fillerMaterialStr != null && fillerMaterialStr.toLowerCase().startsWith("nexo:")) {
+            String nexoId = fillerMaterialStr.substring(5);
+            if (plugin.getServer().getPluginManager().getPlugin("Nexo") != null) {
+                org.bukkit.inventory.ItemStack nexoItem = NexoWrapper.getItem(nexoId);
+                if (nexoItem != null) {
+                    org.bukkit.inventory.meta.ItemMeta meta = nexoItem.getItemMeta();
+                    if (meta != null) {
+                        meta.displayName(MessageManager.parseComponent(" "));
+                        nexoItem.setItemMeta(meta);
+                    }
+                    return nexoItem.clone();
+                }
+            }
+        }
+        try {
+            org.bukkit.Material mat = org.bukkit.Material.valueOf(fillerMaterialStr.toUpperCase());
+            if (mat == org.bukkit.Material.AIR) return new org.bukkit.inventory.ItemStack(org.bukkit.Material.AIR);
+            org.bukkit.inventory.ItemStack filler = new org.bukkit.inventory.ItemStack(mat);
+            org.bukkit.inventory.meta.ItemMeta meta = filler.getItemMeta();
+            if (meta != null) {
+                meta.displayName(MessageManager.parseComponent(" "));
+                filler.setItemMeta(meta);
+            }
+            return filler;
+        } catch (Exception ignored) {
+            return new org.bukkit.inventory.ItemStack(org.bukkit.Material.AIR);
+        }
     }
 
     private static void loadWebServerSettings() {

@@ -21,6 +21,16 @@ gui:
   # Bottom 9 slots are reserved for navigation
   shop_menu_size: 54
 
+  # Item used to fill empty slots in GUIs.
+  # Can be a Material name (e.g. AIR, GRAY_STAINED_GLASS_PANE)
+  # Or a Nexo item (e.g. nexo:shop_empty_slot)
+  filler_material: "AIR"
+
+  # Use Paper's Dialog API for buy/sell instead of click-based transactions.
+  # Requires Paper 1.21.7+ (Minecraft 26.1+). Shows item preview with slider.
+  # Set to false to revert to classic left/right click buy/sell.
+  use_dialog_gui: false
+
 # ================================================================
 # WEB SERVER SETTINGS
 # ================================================================
@@ -810,7 +820,7 @@ items:
   # Books & Enchanting
   BOOK:                     { base: 3.0 }
   WRITABLE_BOOK:            { base: 5.0 }
-  ENCHANTED_BOOK:           { base: -1 }  # Disabled — add specific enchanted books as Server Shop items
+  ENCHANTED_BOOK:           { base: 50.0 }
   EXPERIENCE_BOTTLE:        { base: 20.0 }
 
   # Fireworks & Rockets

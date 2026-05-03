@@ -9,7 +9,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,7 +59,7 @@ public class AdminItemEditGUI {
 
         String itemName = material.name().replace("_", " ");
         this.inventory = Bukkit.createInventory(null, SIZE,
-                LegacyComponentSerializer.legacySection().deserialize("§4§lEdit: " + itemName));
+                MessageManager.parseComponent("§4§lEdit: " + itemName));
     }
 
     public void open() {
@@ -112,7 +112,7 @@ public class AdminItemEditGUI {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(
-                    LegacyComponentSerializer.legacySection().deserialize("§e§l" + material.name().replace("_", " ")));
+                    MessageManager.parseComponent("§e§l" + material.name().replace("_", " ")));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7═══════════════════════");
@@ -122,7 +122,7 @@ public class AdminItemEditGUI {
             lore.add("§7Status: " + (disabled ? "§c✗ DISABLED" : "§a✓ ENABLED"));
             lore.add("§7═══════════════════════");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -135,7 +135,7 @@ public class AdminItemEditGUI {
         ItemStack item = new ItemStack(mat);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize(prefix + delta + " Stock"));
+            meta.displayName(MessageManager.parseComponent(prefix + delta + " Stock"));
 
             List<String> lore = new ArrayList<>();
             double currentStock = ShopDataManager.getStock(material);
@@ -144,7 +144,7 @@ public class AdminItemEditGUI {
             lore.add("");
             lore.add("§eClick to adjust");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -154,7 +154,7 @@ public class AdminItemEditGUI {
         ItemStack item = new ItemStack(Material.GOLD_INGOT);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§e§lChange Base Price"));
+            meta.displayName(MessageManager.parseComponent("§e§lChange Base Price"));
 
             List<String> lore = new ArrayList<>();
             double currentPrice = ShopDataManager.getBasePrice(material);
@@ -162,7 +162,7 @@ public class AdminItemEditGUI {
             lore.add("");
             lore.add("§eClick to change");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -181,7 +181,7 @@ public class AdminItemEditGUI {
         ItemStack item = new ItemStack(Material.CLOCK);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§6§lPrice Increase %"));
+            meta.displayName(MessageManager.parseComponent("§6§lPrice Increase %"));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7Hours since update: §f" + String.format("%.1f", hours));
@@ -192,7 +192,7 @@ public class AdminItemEditGUI {
             lore.add("");
             lore.add("§eClick to set % (resets timer)");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -204,7 +204,7 @@ public class AdminItemEditGUI {
         ItemStack item = new ItemStack(org.minecraftsmp.dynamicshop.managers.CategoryConfigManager.getIcon(current));
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§b§lChange Category"));
+            meta.displayName(MessageManager.parseComponent("§b§lChange Category"));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7Current: §b"
@@ -212,7 +212,7 @@ public class AdminItemEditGUI {
             lore.add("");
             lore.add("§eClick to cycle");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -225,7 +225,7 @@ public class AdminItemEditGUI {
         ItemStack item = new ItemStack(Material.CHEST);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§6§lPricing Max Stock"));
+            meta.displayName(MessageManager.parseComponent("§6§lPricing Max Stock"));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7Limits price drop due to overstock");
@@ -234,7 +234,7 @@ public class AdminItemEditGUI {
             lore.add("§eClick to edit");
             lore.add("§cRight-click to use global default");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -247,7 +247,7 @@ public class AdminItemEditGUI {
         ItemStack item = new ItemStack(Material.TRAPPED_CHEST);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§6§lStorage Hard Limit"));
+            meta.displayName(MessageManager.parseComponent("§6§lStorage Hard Limit"));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7Prevents selling past this stock");
@@ -256,7 +256,7 @@ public class AdminItemEditGUI {
             lore.add("§eClick to edit");
             lore.add("§cRight-click to set unlimited");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -270,7 +270,7 @@ public class AdminItemEditGUI {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(
-                    LegacyComponentSerializer.legacySection().deserialize(disabled ? "§c§lDISABLED" : "§a§lENABLED"));
+                    MessageManager.parseComponent(disabled ? "§c§lDISABLED" : "§a§lENABLED"));
 
             List<String> lore = new ArrayList<>();
             if (disabled) {
@@ -283,7 +283,7 @@ public class AdminItemEditGUI {
                 lore.add("§cClick to DISABLE");
             }
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -297,7 +297,7 @@ public class AdminItemEditGUI {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(
-                    LegacyComponentSerializer.legacySection().deserialize(
+                    MessageManager.parseComponent(
                             buyDisabled ? "§c§lBUY DISABLED" : "§a§lBUY ENABLED"));
 
             List<String> lore = new ArrayList<>();
@@ -311,7 +311,7 @@ public class AdminItemEditGUI {
                 lore.add("§cClick to DISABLE buying");
             }
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -325,7 +325,7 @@ public class AdminItemEditGUI {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(
-                    LegacyComponentSerializer.legacySection().deserialize(
+                    MessageManager.parseComponent(
                             sellDisabled ? "§c§lSELL DISABLED" : "§a§lSELL ENABLED"));
 
             List<String> lore = new ArrayList<>();
@@ -339,7 +339,7 @@ public class AdminItemEditGUI {
                 lore.add("§cClick to DISABLE selling");
             }
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -349,23 +349,17 @@ public class AdminItemEditGUI {
         ItemStack item = new ItemStack(Material.ARROW);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§c§l◀ Back"));
+            meta.displayName(MessageManager.parseComponent("§c§l◀ Back"));
             List<String> lore = new ArrayList<>();
             lore.add("§7Return to item browser");
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
     }
 
     private ItemStack createFiller() {
-        ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta = filler.getItemMeta();
-        if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize(" "));
-            filler.setItemMeta(meta);
-        }
-        return filler;
+        return org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
     }
 
     /**

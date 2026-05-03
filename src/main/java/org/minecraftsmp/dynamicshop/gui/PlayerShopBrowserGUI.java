@@ -9,7 +9,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -26,8 +26,10 @@ public class PlayerShopBrowserGUI {
     public PlayerShopBrowserGUI(DynamicShop plugin, Player viewer) {
         this.plugin = plugin;
         this.viewer = viewer;
+        String title = plugin.getMessageManager().getMessage("player-shop-browser-title");
+        if (title == null) title = "§6§lPlayer Shops";
         this.inventory = Bukkit.createInventory(null, GUI_SIZE,
-                LegacyComponentSerializer.legacySection().deserialize("§6§lPlayer Shops"));
+                MessageManager.parseComponent(title));
 
         refreshPage();
     }
@@ -96,7 +98,7 @@ public class PlayerShopBrowserGUI {
                 meta.setOwningPlayer(Bukkit.getOfflinePlayer(playerId));
             }
 
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§e§l" + playerName + "'s Shop"));
+            meta.displayName(MessageManager.parseComponent("§e§l" + playerName + "'s Shop"));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7Items for sale: §f" + itemCount);
@@ -109,7 +111,7 @@ public class PlayerShopBrowserGUI {
                 lore.add("§eClick to browse");
             }
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             head.setItemMeta(meta);
         }
 
@@ -124,7 +126,7 @@ public class PlayerShopBrowserGUI {
             ItemStack prevPage = new ItemStack(Material.ARROW);
             ItemMeta prevMeta = prevPage.getItemMeta();
             if (prevMeta != null) {
-                prevMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§e◀ Previous Page"));
+                prevMeta.displayName(MessageManager.parseComponent("§e◀ Previous Page"));
                 prevPage.setItemMeta(prevMeta);
             }
             inventory.setItem(48, prevPage);
@@ -134,12 +136,11 @@ public class PlayerShopBrowserGUI {
         ItemStack pageInfo = new ItemStack(Material.PAPER);
         ItemMeta pageInfoMeta = pageInfo.getItemMeta();
         if (pageInfoMeta != null) {
-            pageInfoMeta.displayName(LegacyComponentSerializer.legacySection()
-                    .deserialize("§7Page " + (currentPage + 1) + " / " + (maxPage + 1)));
+            pageInfoMeta.displayName(MessageManager.parseComponent("§7Page " + (currentPage + 1) + " / " + (maxPage + 1)));
             List<String> lore = new ArrayList<>();
             lore.add("§7Total shops: §f" + totalShops);
             pageInfoMeta
-                    .lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+                    .lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             pageInfo.setItemMeta(pageInfoMeta);
         }
         inventory.setItem(49, pageInfo);
@@ -149,7 +150,7 @@ public class PlayerShopBrowserGUI {
             ItemStack nextPage = new ItemStack(Material.ARROW);
             ItemMeta nextMeta = nextPage.getItemMeta();
             if (nextMeta != null) {
-                nextMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§eNext Page ▶"));
+                nextMeta.displayName(MessageManager.parseComponent("§eNext Page ▶"));
                 nextPage.setItemMeta(nextMeta);
             }
             inventory.setItem(50, nextPage);
@@ -159,7 +160,7 @@ public class PlayerShopBrowserGUI {
         ItemStack back = new ItemStack(Material.BARRIER);
         ItemMeta backMeta = back.getItemMeta();
         if (backMeta != null) {
-            backMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§c◀ Back to Shop"));
+            backMeta.displayName(MessageManager.parseComponent("§c◀ Back to Shop"));
             back.setItemMeta(backMeta);
         }
         inventory.setItem(45, back);
@@ -168,14 +169,14 @@ public class PlayerShopBrowserGUI {
         ItemStack info = new ItemStack(Material.BOOK);
         ItemMeta infoMeta = info.getItemMeta();
         if (infoMeta != null) {
-            infoMeta.displayName(LegacyComponentSerializer.legacySection().deserialize("§b§lHow to Sell"));
+            infoMeta.displayName(MessageManager.parseComponent("§b§lHow to Sell"));
             List<String> lore = new ArrayList<>();
             lore.add("§7Hold an item and type:");
             lore.add("§e/shop sell <price>");
             lore.add("");
             lore.add("§7Example:");
             lore.add("§f/shop sell 100");
-            infoMeta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            infoMeta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             info.setItemMeta(infoMeta);
         }
         inventory.setItem(53, info);

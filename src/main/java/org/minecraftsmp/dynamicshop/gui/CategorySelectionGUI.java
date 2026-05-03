@@ -11,7 +11,7 @@ import org.minecraftsmp.dynamicshop.category.ItemCategory;
 import org.minecraftsmp.dynamicshop.managers.CategoryConfigManager;
 import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import org.minecraftsmp.dynamicshop.managers.ShopDataManager;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,7 +26,7 @@ public class CategorySelectionGUI {
     private final Player player;
     private final Inventory inv;
 
-    private static final int SIZE = 36;
+    private static final int SIZE = 54;
 
     public CategorySelectionGUI(DynamicShop plugin, Player player) {
         this.plugin = plugin;
@@ -36,7 +36,7 @@ public class CategorySelectionGUI {
         if (title == null) title = "§8§lShop Categories";
         
         this.inv = Bukkit.createInventory(null, SIZE,
-                LegacyComponentSerializer.legacySection().deserialize(title));
+                MessageManager.parseComponent(title, player));
     }
 
     public void open() {
@@ -65,10 +65,9 @@ public class CategorySelectionGUI {
 
     private ItemStack createCategoryItem(ItemCategory category) {
         // Use configured icon and name from CategoryConfigManager
-        Material icon = CategoryConfigManager.getIcon(category);
+        ItemStack item = CategoryConfigManager.getIconItem(category);
         String displayName = CategoryConfigManager.getDisplayName(category);
 
-        ItemStack item = new ItemStack(icon);
         ItemMeta meta = item.getItemMeta();
 
         if (meta != null) {
@@ -76,7 +75,7 @@ public class CategorySelectionGUI {
             String formattedName = displayName.contains("&")
                     ? displayName
                     : "§e§l" + displayName;
-            meta.displayName(LegacyComponentSerializer.legacyAmpersand().deserialize(formattedName));
+            meta.displayName(MessageManager.parseComponent(formattedName));
 
             List<String> lore = new ArrayList<>();
             lore.add("§7───────────────────");
@@ -94,7 +93,7 @@ public class CategorySelectionGUI {
 
             lore.add("§7───────────────────");
 
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
 
@@ -119,13 +118,7 @@ public class CategorySelectionGUI {
     }
 
     private ItemStack createFiller() {
-        ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta = filler.getItemMeta();
-        if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize(" "));
-            filler.setItemMeta(meta);
-        }
-        return filler;
+        return org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
     }
 
     public void handleClick(Player p, int slot) {

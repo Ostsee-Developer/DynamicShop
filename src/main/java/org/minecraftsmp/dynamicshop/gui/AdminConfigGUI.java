@@ -6,7 +6,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.managers.ConfigCacheManager;
 
@@ -66,7 +66,7 @@ public class AdminConfigGUI {
         this.player = player;
         this.parentGUI = parentGUI;
         this.inventory = Bukkit.createInventory(null, SIZE,
-                LegacyComponentSerializer.legacySection().deserialize("§4§lConfig Editor"));
+                MessageManager.parseComponent("§4§lConfig Editor"));
     }
 
     public void open() {
@@ -144,13 +144,13 @@ public class AdminConfigGUI {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(
-                    LegacyComponentSerializer.legacySection().deserialize((currentValue ? "§a" : "§c") + "§l" + name));
+                    MessageManager.parseComponent((currentValue ? "§a" : "§c") + "§l" + name));
             List<String> lore = new ArrayList<>();
             lore.add("§7Status: " + (currentValue ? "§aENABLED" : "§cDISABLED"));
             lore.add("§7Config: §f" + configPath);
             lore.add("");
             lore.add("§eClick to toggle");
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -160,13 +160,13 @@ public class AdminConfigGUI {
         ItemStack item = new ItemStack(icon);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§e§l" + name));
+            meta.displayName(MessageManager.parseComponent("§e§l" + name));
             List<String> lore = new ArrayList<>();
             lore.add("§7Value: §f" + String.format("%.2f", currentValue));
             lore.add("§7Config: §f" + configPath);
             lore.add("");
             lore.add("§eClick to change");
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -176,13 +176,13 @@ public class AdminConfigGUI {
         ItemStack item = new ItemStack(icon);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§e§l" + name));
+            meta.displayName(MessageManager.parseComponent("§e§l" + name));
             List<String> lore = new ArrayList<>();
             lore.add("§7Value: §f" + currentValue);
             lore.add("§7Config: §f" + configPath);
             lore.add("");
             lore.add("§eClick to change");
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
@@ -192,23 +192,17 @@ public class AdminConfigGUI {
         ItemStack item = new ItemStack(Material.ARROW);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize("§c§l◀ Back"));
+            meta.displayName(MessageManager.parseComponent("§c§l◀ Back"));
             List<String> lore = new ArrayList<>();
             lore.add("§7Return to admin shop");
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;
     }
 
     private ItemStack createFiller() {
-        ItemStack filler = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
-        ItemMeta meta = filler.getItemMeta();
-        if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection().deserialize(" "));
-            filler.setItemMeta(meta);
-        }
-        return filler;
+        return org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
     }
 
     public void handleClick(int slot) {
@@ -341,8 +335,7 @@ public class AdminConfigGUI {
         ItemStack item = new ItemStack(icon);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(LegacyComponentSerializer.legacySection()
-                    .deserialize(color + "§lInput Method: " + current.toUpperCase()));
+            meta.displayName(MessageManager.parseComponent(color + "§lInput Method: " + current.toUpperCase()));
             List<String> lore = new ArrayList<>();
             lore.add("§7Current: " + color + current);
             lore.add("§7Config: §finput-method");
@@ -350,7 +343,7 @@ public class AdminConfigGUI {
             lore.add("§7Options: auto, dialog, anvil, chat");
             lore.add("");
             lore.add("§eClick to cycle");
-            meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+            meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
         return item;

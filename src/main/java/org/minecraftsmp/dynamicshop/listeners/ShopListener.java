@@ -1,6 +1,6 @@
 package org.minecraftsmp.dynamicshop.listeners;
 
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -339,6 +339,15 @@ public class ShopListener implements Listener {
     // CLICK INSIDE SHOP GUI
     // ------------------------------------------------------------------
     private void handleShopClick(Player p, ShopGUI gui, int slot, boolean right, boolean shift) {
+        // Home button (top-middle, slot 4)
+        if (slot == 4 && !gui.isCommandOpened()) {
+            unregisterShop(p);
+            CategorySelectionGUI cg = new CategorySelectionGUI(plugin, p);
+            cg.open();
+            registerCategory(p, cg);
+            return;
+        }
+
         if (gui.isNavigationSlot(slot)) {
             handleNavigationClick(p, gui, slot);
             return;
@@ -372,6 +381,13 @@ public class ShopListener implements Listener {
             ItemActionGUI actionGUI = new ItemActionGUI(plugin, p, mat, gui);
             registerItemAction(p, actionGUI);
             actionGUI.open();
+            return;
+        }
+
+        // Dialog-based buy/sell (configurable, Java edition only)
+        if (ConfigCacheManager.useDialogGui) {
+            p.closeInventory();
+            plugin.getShopDialogManager().openDialog(p, mat, gui);
             return;
         }
 
@@ -775,7 +791,7 @@ public class ShopListener implements Listener {
         ItemMeta meta = fake.getItemMeta();
         if (meta == null)
             return;
-        meta.lore(lore.stream().map(s -> LegacyComponentSerializer.legacySection().deserialize(s)).toList());
+        meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
         fake.setItemMeta(meta);
 
         com.comphenix.protocol.events.PacketContainer packet = pm

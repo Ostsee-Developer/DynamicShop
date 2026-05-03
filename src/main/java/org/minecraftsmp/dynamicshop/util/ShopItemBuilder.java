@@ -4,7 +4,7 @@ import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.minecraftsmp.dynamicshop.managers.MessageManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -69,11 +69,51 @@ public class ShopItemBuilder {
         if (meta != null) {
 
             // Handle both & and § in name if present
-            meta.displayName(LegacyComponentSerializer.legacyAmpersand().deserialize(name));
+            meta.displayName(MessageManager.parseComponent(name));
 
             List<Component> lore = new ArrayList<>();
             for (String line : loreLines) {
-                lore.add(LegacyComponentSerializer.legacyAmpersand().deserialize(line));
+                lore.add(MessageManager.parseComponent(line));
+            }
+
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+
+        return item;
+    }
+
+    /**
+     * Create a nav item using a Nexo custom item if available, falling back to vanilla Material.
+     * @param name Display name
+     * @param nexoId Nexo item ID (e.g. "shop_back_button")
+     * @param fallbackIcon Vanilla material to use if Nexo isn't available
+     * @param loreLines Lore text lines
+     */
+    public static ItemStack navItemNexo(String name, String nexoId, Material fallbackIcon, String... loreLines) {
+        ItemStack item = null;
+
+        // Try Nexo custom item first
+        if (nexoId != null && org.minecraftsmp.dynamicshop.DynamicShop.getInstance()
+                .getServer().getPluginManager().getPlugin("Nexo") != null) {
+            item = org.minecraftsmp.dynamicshop.managers.NexoWrapper.getItem(nexoId);
+            if (item != null) {
+                item = item.clone();
+            }
+        }
+
+        // Fall back to vanilla material
+        if (item == null) {
+            item = new ItemStack(fallbackIcon);
+        }
+
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(MessageManager.parseComponent(name));
+
+            List<Component> lore = new ArrayList<>();
+            for (String line : loreLines) {
+                lore.add(MessageManager.parseComponent(line));
             }
 
             meta.lore(lore);
@@ -87,15 +127,7 @@ public class ShopItemBuilder {
     // FILLER PANE (DECORATION)
     // ---------------------------------------------------------
     public static ItemStack filler() {
-        ItemStack item = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(component(" "));
-            item.setItemMeta(meta);
-        }
-
-        return item;
+        return org.minecraftsmp.dynamicshop.managers.ConfigCacheManager.getFillerItem();
     }
 
     // ---------------------------------------------------------
@@ -119,6 +151,6 @@ public class ShopItemBuilder {
     }
 
     private static Component component(String text) {
-        return LegacyComponentSerializer.legacySection().deserialize(text);
+        return MessageManager.parseComponent(text);
     }
 }
