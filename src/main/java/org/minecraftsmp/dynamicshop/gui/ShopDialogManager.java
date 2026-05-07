@@ -60,6 +60,9 @@ public class ShopDialogManager {
                 
         Component sellPriceComp = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
                 plugin.getMessageManager().getMessage("dialog-sell-price", sellPlaceholders), player);
+
+        Component priceWarningComp = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                plugin.getMessageManager().getMessage("dialog-price-warning"), player);
                 
         Component qtyLabel = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
                 plugin.getMessageManager().getMessage("dialog-quantity"), player);
@@ -82,6 +85,11 @@ public class ShopDialogManager {
         Component returnDesc = org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
                 plugin.getMessageManager().getMessage("dialog-return-desc"), player);
 
+        // Combine buy and sell price on adjacent lines for tighter spacing
+        Component pricesComp = buyPriceComp
+                .append(Component.text("\n"))
+                .append(sellPriceComp);
+
         // Build the dialog dynamically
         Dialog dialog = Dialog.create(builder -> builder.empty()
                 .base(DialogBase.builder(titleComp)
@@ -92,8 +100,8 @@ public class ShopDialogManager {
                                         .showDecorations(true)
                                         .showTooltip(true)
                                         .build(),
-                                DialogBody.plainMessage(buyPriceComp, 300),
-                                DialogBody.plainMessage(sellPriceComp, 300)
+                                DialogBody.plainMessage(pricesComp, 300),
+                                DialogBody.plainMessage(priceWarningComp, 300)
                         ))
                         .inputs(List.of(
                                 DialogInput.numberRange("quantity", qtyLabel, 0f, 128f)
@@ -119,7 +127,8 @@ public class ShopDialogManager {
                                                 int qty = qtyFloat != null ? qtyFloat.intValue() : 0;
                                                 
                                                 if (qty <= 0) {
-                                                    p.sendMessage(Component.text("Set a quantity to buy!", net.kyori.adventure.text.format.NamedTextColor.RED));
+                                                    p.sendMessage(org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                                                            plugin.getMessageManager().getMessage("dialog-error-no-qty-buy"), p));
                                                     return;
                                                 }
                                                 
@@ -149,7 +158,8 @@ public class ShopDialogManager {
                                                     if (totalItems > 0) {
                                                         plugin.getShopListener().sellItem(p, mat, totalItems, gui);
                                                     } else {
-                                                        p.sendMessage(Component.text("You don't have any to sell!", net.kyori.adventure.text.format.NamedTextColor.RED));
+                                                        p.sendMessage(org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                                                                plugin.getMessageManager().getMessage("dialog-error-no-items-sell"), p));
                                                     }
                                                     return;
                                                 }
@@ -158,7 +168,8 @@ public class ShopDialogManager {
                                                 int qty = qtyFloat != null ? qtyFloat.intValue() : 0;
                                                 
                                                 if (qty <= 0) {
-                                                    p.sendMessage(Component.text("Set a quantity to sell!", net.kyori.adventure.text.format.NamedTextColor.RED));
+                                                    p.sendMessage(org.minecraftsmp.dynamicshop.managers.MessageManager.parseComponent(
+                                                            plugin.getMessageManager().getMessage("dialog-error-no-qty-sell"), p));
                                                     return;
                                                 }
                                                 
@@ -188,7 +199,7 @@ public class ShopDialogManager {
                                         ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).lifetime(java.time.Duration.ofMinutes(5)).build()
                                 )
                         )
-                )).build()));
+                ), null, 3)));
         player.showDialog(dialog);
     }
 

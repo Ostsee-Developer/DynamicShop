@@ -189,7 +189,12 @@ messages:
   dialog-sell-desc: "<gray>Sell the selected quantity"
   dialog-sell-all-label: "<white>Sell All"
   dialog-return-button: "<gray>Return"
-  dialog-return-desc: "<gray>Go back to the shop"
+  dialog-return-desc: "&7Go back to the shop"
+  dialog-price-warning: "&8&oPrices shown are per unit. Bulk orders may cost more or pay less due to dynamic pricing."
+  dialog-error-no-qty-buy: "&cSet a quantity to buy!"
+  dialog-error-no-qty-sell: "&cSet a quantity to sell!"
+  dialog-error-no-items-sell: "&cYou don't have any to sell!"
+  dialog-lore-click-to-open: "&eClick to open"
 
 # ================================================================
 # Translation Guide

@@ -148,10 +148,14 @@ public class SearchResultsGUI {
         }
 
         lore.add("");
-        lore.add(plugin.getMessageManager().getMessage("search-lore-buy-1"));
-        lore.add(plugin.getMessageManager().getMessage("search-lore-buy-64"));
-        lore.add(plugin.getMessageManager().getMessage("search-lore-sell-1"));
-        lore.add(plugin.getMessageManager().getMessage("search-lore-sell-64"));
+        if (ConfigCacheManager.useDialogGui) {
+            lore.add(plugin.getMessageManager().getMessage("dialog-lore-click-to-open"));
+        } else {
+            lore.add(plugin.getMessageManager().getMessage("search-lore-buy-1"));
+            lore.add(plugin.getMessageManager().getMessage("search-lore-buy-64"));
+            lore.add(plugin.getMessageManager().getMessage("search-lore-sell-1"));
+            lore.add(plugin.getMessageManager().getMessage("search-lore-sell-64"));
+        }
 
         meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
         item.setItemMeta(meta);

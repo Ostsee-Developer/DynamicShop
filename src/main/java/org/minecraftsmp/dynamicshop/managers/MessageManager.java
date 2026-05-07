@@ -43,8 +43,8 @@ public class MessageManager {
             boolean nexoInstalled = plugin.getServer().getPluginManager().getPlugin("Nexo") != null;
             if (nexoInstalled) {
                 try {
-                    // Save messages_nexo.yml content AS messages.yml
-                    InputStream nexoStream = plugin.getResource("messages_nexo.yml");
+                    // Save messages_nexo_example.yml content AS messages.yml
+                    InputStream nexoStream = plugin.getResource("messages_nexo_example.yml");
                     if (nexoStream != null) {
                         java.nio.file.Files.copy(nexoStream, messagesFile.toPath());
                         nexoStream.close();
@@ -61,13 +61,13 @@ public class MessageManager {
             }
         }
 
-        // Also generate messages_nexo.yml template as a reference if it doesn't exist
-        File nexoFile = new File(plugin.getDataFolder(), "messages_nexo.yml");
+        // Also generate messages_nexo_example.yml template as a reference if it doesn't exist
+        File nexoFile = new File(plugin.getDataFolder(), "messages_nexo_example.yml");
         if (!nexoFile.exists()) {
             try {
-                plugin.saveResource("messages_nexo.yml", false);
+                plugin.saveResource("messages_nexo_example.yml", false);
             } catch (IllegalArgumentException e) {
-                plugin.getLogger().warning("Could not generate messages_nexo.yml template.");
+                plugin.getLogger().warning("Could not generate messages_nexo_example.yml template.");
             }
         }
 
@@ -86,12 +86,13 @@ public class MessageManager {
                 if (!messagesConfig.isSet(key)) {
                     messagesConfig.set(key, defaultConfig.get(key));
                     changed = true;
+                    plugin.getLogger().info("[Messages] Added missing key: " + key);
                 }
             }
             if (changed) {
                 try {
                     messagesConfig.save(messagesFile);
-                    plugin.getLogger().info("[Messages] Added missing message keys to messages.yml");
+                    plugin.getLogger().info("[Messages] Saved updated messages.yml with new keys.");
                 } catch (java.io.IOException e) {
                     plugin.getLogger().warning("[Messages] Could not save updated messages.yml: " + e.getMessage());
                 }

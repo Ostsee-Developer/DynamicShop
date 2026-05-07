@@ -280,6 +280,10 @@ public class ShopListener implements Listener {
         if (clicked == null || clicked.getType() == Material.AIR)
             return;
 
+        // When dialog GUI is enabled, disable direct right-click sell from inventory
+        if (ConfigCacheManager.useDialogGui && !org.minecraftsmp.dynamicshop.util.BedrockUtil.isBedrock(p))
+            return;
+
         // Only sell on RIGHT-click
         if (!isRightClick)
             return;
@@ -780,9 +784,11 @@ public class ShopListener implements Listener {
             }
 
             // instructions
-            lore.add("");
-            lore.add(plugin.getMessageManager().getMessage("lore-click-to-sell-1"));
-            lore.add(plugin.getMessageManager().getMessage("lore-shift-click-to-sell-64"));
+            if (!ConfigCacheManager.useDialogGui) {
+                lore.add("");
+                lore.add(plugin.getMessageManager().getMessage("lore-click-to-sell-1"));
+                lore.add(plugin.getMessageManager().getMessage("lore-shift-click-to-sell-64"));
+            }
 
             loreCache.put(mat, lore);
         }

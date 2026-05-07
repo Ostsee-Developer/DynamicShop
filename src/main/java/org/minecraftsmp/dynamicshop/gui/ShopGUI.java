@@ -95,7 +95,7 @@ public class ShopGUI {
         plugin.getShopListener().unregisterCategory(player);
         plugin.getShopListener().unregisterShop(player); // just in case
 
-        // Build the title using the message key (supports Nexo glyphs in messages_nexo.yml)
+        // Build the title using the message key (supports Nexo glyphs in messages_nexo_example.yml)
         java.util.Map<String, String> titlePlaceholders = new java.util.HashMap<>();
         titlePlaceholders.put("category", org.minecraftsmp.dynamicshop.managers.CategoryConfigManager.getDisplayName(category));
         String title = plugin.getMessageManager().getMessage("shop-gui-title", titlePlaceholders);
@@ -367,15 +367,20 @@ public class ShopGUI {
             }
 
             lore.add("");
-            if (!buyDisabled) {
-                MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("shop-lore-left-click-buy"));
-                MessageManager.addLoreIfNotEmpty(lore,
-                        plugin.getMessageManager().getMessage("shop-lore-shift-left-click-buy"));
-            }
-            if (!sellDisabled) {
-                MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("shop-lore-right-click-sell"));
-                MessageManager.addLoreIfNotEmpty(lore,
-                        plugin.getMessageManager().getMessage("shop-lore-shift-right-click-sell"));
+            if (ConfigCacheManager.useDialogGui) {
+                // Dialog mode: show simple 'click to open' instead of buy/sell instructions
+                MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("dialog-lore-click-to-open"));
+            } else {
+                if (!buyDisabled) {
+                    MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("shop-lore-left-click-buy"));
+                    MessageManager.addLoreIfNotEmpty(lore,
+                            plugin.getMessageManager().getMessage("shop-lore-shift-left-click-buy"));
+                }
+                if (!sellDisabled) {
+                    MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("shop-lore-right-click-sell"));
+                    MessageManager.addLoreIfNotEmpty(lore,
+                            plugin.getMessageManager().getMessage("shop-lore-shift-right-click-sell"));
+                }
             }
 
             meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
