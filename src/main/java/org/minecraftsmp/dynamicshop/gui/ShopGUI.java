@@ -113,9 +113,9 @@ public class ShopGUI {
         plugin.getShopListener().updatePlayerInventoryLore(player, 2L);
 
         // Update player inventory lore AFTER the GUI is open
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        player.getScheduler().runDelayed(plugin, task -> {
             plugin.getShopListener().updatePlayerInventoryLore(player);
-        }, 3L);
+        }, null, 3L);
     }
 
     /**

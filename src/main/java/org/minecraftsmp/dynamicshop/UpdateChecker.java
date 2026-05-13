@@ -35,7 +35,7 @@ public class UpdateChecker implements Listener {
      * Kick off an async check against the GitHub releases API.
      */
     public void check() {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+        Bukkit.getAsyncScheduler().runNow(plugin, task -> {
             try {
                 URL url = URI.create(GITHUB_API_URL).toURL();
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -99,14 +99,14 @@ public class UpdateChecker implements Listener {
         if (!player.isOp()) return;
 
         // Delay the message so it doesn't get buried in join spam
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        player.getScheduler().runDelayed(plugin, task -> {
             if (player.isOnline()) {
                 String currentVersion = plugin.getDescription().getVersion();
                 player.sendMessage("§e[DynamicShop] §fA new version is available: §a" + latestVersion
                         + " §f(you are running §c" + currentVersion + "§f)");
                 player.sendMessage("§e[DynamicShop] §fDownload: §bhttps://github.com/selfservice0/DynamicShop/releases/latest");
             }
-        }, 60L); // 3 second delay
+        }, null, 60L); // 3 second delay
     }
 
     /**

@@ -4,7 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.scheduler.BukkitRunnable;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
 import org.bukkit.inventory.ItemStack;
@@ -62,8 +62,8 @@ public class ShopDataManager {
     private static File shopDataFile;
     private static YamlConfiguration shopDataConfig;
 
-    public static BukkitRunnable saveTimer;
-    private static BukkitRunnable shortageTicker;
+    public static ScheduledTask saveTimer;
+    private static ScheduledTask shortageTicker;
 
     // ------------------------------------------------------------------------
     // INIT
@@ -87,14 +87,9 @@ public class ShopDataManager {
 
         if (ConfigCacheManager.crossServerEnabled) {
             if (saveTimer == null || saveTimer.isCancelled()) {
-                saveTimer = new BukkitRunnable() {
-                    @Override
-                    public void run() {
-                        saveQueuedItems();
-                    }
-                };
                 int seconds = ConfigCacheManager.crossServerSaveInterval;
-                saveTimer.runTaskTimer(plugin, seconds * 20L, seconds * 20L);
+                saveTimer = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(
+                        plugin, task -> saveQueuedItems(), seconds * 20L, seconds * 20L);
             }
         }
 
@@ -104,13 +99,8 @@ public class ShopDataManager {
         if (shortageTicker != null && !shortageTicker.isCancelled()) {
             shortageTicker.cancel();
         }
-        shortageTicker = new BukkitRunnable() {
-            @Override
-            public void run() {
-                tickAllShortage();
-            }
-        };
-        shortageTicker.runTaskTimer(plugin, 72000L, 72000L); // 1 hour = 72000 ticks
+        shortageTicker = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(
+                plugin, task -> tickAllShortage(), 72000L, 72000L); // 1 hour = 72000 ticks
     }
 
     public static void reload() {

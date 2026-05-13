@@ -3,7 +3,7 @@ package org.minecraftsmp.dynamicshop.managers;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.scheduler.BukkitRunnable;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
 
@@ -28,7 +28,7 @@ public class RestockManager {
     private record RestockRule(ItemCategory category, double targetStock, long intervalTicks) {}
 
     private final DynamicShop plugin;
-    private final List<BukkitRunnable> timers = new ArrayList<>();
+    private final List<ScheduledTask> timers = new ArrayList<>();
 
     public RestockManager(DynamicShop plugin) {
         this.plugin = plugin;
@@ -81,25 +81,21 @@ public class RestockManager {
     }
 
     private void scheduleRule(RestockRule rule) {
-        BukkitRunnable task = new BukkitRunnable() {
-            @Override
-            public void run() {
-                List<Material> items = ShopDataManager.getItemsInCategory(rule.category());
-                int count = 0;
-                for (Material mat : items) {
-                    ShopDataManager.setStockDirect(mat, rule.targetStock());
-                    count++;
-                }
-                Bukkit.getLogger().info("[DynamicShop] Restocked " + count + " items in "
-                        + rule.category().getDisplayName() + " to " + (int) rule.targetStock());
+        ScheduledTask task = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, scheduledTask -> {
+            List<Material> items = ShopDataManager.getItemsInCategory(rule.category());
+            int count = 0;
+            for (Material mat : items) {
+                ShopDataManager.setStockDirect(mat, rule.targetStock());
+                count++;
             }
-        };
-        task.runTaskTimer(plugin, rule.intervalTicks(), rule.intervalTicks());
+            Bukkit.getLogger().info("[DynamicShop] Restocked " + count + " items in "
+                    + rule.category().getDisplayName() + " to " + (int) rule.targetStock());
+        }, rule.intervalTicks(), rule.intervalTicks());
         timers.add(task);
     }
 
     public void shutdown() {
-        for (BukkitRunnable timer : timers) {
+        for (ScheduledTask timer : timers) {
             if (!timer.isCancelled()) {
                 timer.cancel();
             }
