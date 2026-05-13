@@ -81,7 +81,11 @@ public class ShopGUI {
             this.allItems = ShopDataManager.getItemsInCategory(category);
             if (allItems == null)
                 allItems = List.of();
-            this.specialItems = List.of(); // Empty special items
+
+            // Also load any special items assigned to this category (e.g., enchanted variants)
+            this.specialItems = plugin.getSpecialShopManager().getAllSpecialItems().values().stream()
+                    .filter(item -> item.getCategory() == category)
+                    .collect(Collectors.toList());
 
             updateDisplayItems(); // Populate displayItems based on initial state
         }
@@ -143,7 +147,7 @@ public class ShopGUI {
 
         // Render based on category type
         if (category == ItemCategory.PERMISSIONS || category == ItemCategory.SERVER_SHOP) {
-            // Render special items into mapped slots
+            // Pure special-item categories
             int start = page * itemsPerPage;
             int end = Math.min(start + itemsPerPage, specialItems.size());
 
@@ -155,16 +159,26 @@ public class ShopGUI {
                 pm.sendSlot(inventory, slot, displayItem);
             }
         } else {
-            // Render regular items into mapped slots
+            // Regular categories — render regular items first, then any special items
+            int totalCombined = displayItems.size() + specialItems.size();
             int start = page * itemsPerPage;
-            int end = Math.min(start + itemsPerPage, displayItems.size());
+            int end = Math.min(start + itemsPerPage, totalCombined);
 
             for (int i = start; i < end; i++) {
-                Material mat = displayItems.get(i);
                 int slot = itemSlots[i - start];
 
-                ItemStack displayItem = buildShopItem(mat);
-                pm.sendSlot(inventory, slot, displayItem);
+                if (i < displayItems.size()) {
+                    // Regular item
+                    Material mat = displayItems.get(i);
+                    ItemStack displayItem = buildShopItem(mat);
+                    pm.sendSlot(inventory, slot, displayItem);
+                } else {
+                    // Special item (enchanted variant, etc.)
+                    int specialIdx = i - displayItems.size();
+                    SpecialShopItem specialItem = specialItems.get(specialIdx);
+                    ItemStack displayItem = buildSpecialShopItem(specialItem);
+                    pm.sendSlot(inventory, slot, displayItem);
+                }
             }
         }
 
@@ -187,8 +201,9 @@ public class ShopGUI {
             displayItems = new ArrayList<>(allItems);
         }
 
-        // Recalculate max page
-        this.maxPage = displayItems.isEmpty() ? 0 : (displayItems.size() - 1) / itemsPerPage;
+        // Recalculate max page (include special items in the total)
+        int totalCombined = displayItems.size() + specialItems.size();
+        this.maxPage = totalCombined <= 0 ? 0 : (totalCombined - 1) / itemsPerPage;
 
         // Safety check: if current page exceeds maxPage (due to filtering), reset to 0
         if (page > maxPage) {
@@ -213,6 +228,13 @@ public class ShopGUI {
             item = ItemsAdderWrapper.getItem(specialItem.getNbt());
         } else if ("nexo".equalsIgnoreCase(specialItem.getDeliveryMethod()) && specialItem.getNbt() != null) {
             item = NexoWrapper.getItem(specialItem.getNbt());
+        } else if ("valhallammo".equalsIgnoreCase(specialItem.getDeliveryMethod()) && specialItem.getNbt() != null) {
+            item = org.minecraftsmp.dynamicshop.managers.ValhallaMMOWrapper.getItem(specialItem.getNbt());
+        } else if ("component".equalsIgnoreCase(specialItem.getDeliveryMethod()) || "stored_item".equalsIgnoreCase(specialItem.getDeliveryMethod())) {
+            String configPath = "special_items." + specialItem.getId() + ".stored_item";
+            if (plugin.getConfig().contains(configPath)) {
+                item = plugin.getConfig().getItemStack(configPath);
+            }
         }
 
         if (item == null) {
@@ -223,15 +245,43 @@ public class ShopGUI {
         }
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(
-                    MessageManager.parseComponent("§e§l" + specialItem.getDisplayName()));
+            // Use the item's existing display name if it has one (e.g., from stored_item)
+            // Otherwise prettify the material name
+            if (!meta.hasDisplayName()) {
+                String prettyName = specialItem.getDisplayMaterial() != null
+                        ? prettifyMaterialName(specialItem.getDisplayMaterial().name())
+                        : specialItem.getDisplayName();
+                meta.displayName(MessageManager.parseComponent("§e§l" + prettyName));
+            }
 
             List<String> lore = new ArrayList<>();
             lore.add("§7───────────────────");
 
-            // Price
-            String priceFormatted = plugin.getEconomyManager().format(specialItem.getPrice());
-            lore.add("§eBUY: §a" + priceFormatted);
+            // Prices — use dynamic pricing from base material if available
+            Material baseMat = specialItem.getDisplayMaterial();
+            boolean hasDynamicPrice = baseMat != null && ShopDataManager.itemConfigs.containsKey(baseMat);
+
+            if (hasDynamicPrice) {
+                // Use the base material's dynamic pricing
+                double buyPrice = ShopDataManager.getTotalBuyCost(baseMat, 1);
+                double sellPrice = ShopDataManager.getTotalSellValue(baseMat, 1);
+                String buyFormatted = plugin.getEconomyManager().format(buyPrice);
+                String sellFormatted = plugin.getEconomyManager().format(sellPrice);
+
+                boolean buyDisabled = ShopDataManager.isBuyDisabled(baseMat);
+                boolean sellDisabled = ShopDataManager.isSellDisabled(baseMat);
+
+                if (!buyDisabled) {
+                    lore.add("§a§lBUY: §f" + buyFormatted);
+                }
+                if (!sellDisabled && sellPrice > 0) {
+                    lore.add("§c§lSELL: §f" + sellFormatted);
+                }
+            } else {
+                // Fall back to the special item's fixed price
+                String priceFormatted = plugin.getEconomyManager().format(specialItem.getPrice());
+                lore.add("§a§lBUY: §f" + priceFormatted);
+            }
 
             lore.add("§7");
 
@@ -246,18 +296,52 @@ public class ShopGUI {
                     lore.add("§a✔ You already own this!");
                 }
             } else if (specialItem.isServerShopItem()) {
-                lore.add("§7Type: §bServer Item");
-                lore.add("§7ID: §f" + specialItem.getItemIdentifier());
+                // Show stock info using the base material's stock pool
+                if (baseMat != null) {
+                    double stock = ShopDataManager.getStock(baseMat);
+                    if (stock < 0) {
+                        java.util.Map<String, String> stPh = new java.util.HashMap<>();
+                        stPh.put("stock", String.format("%.0f", stock));
+                        lore.add(plugin.getMessageManager().getMessage("lore-stock-negative", stPh));
+                    } else if (stock == 0) {
+                        lore.add(plugin.getMessageManager().getMessage("lore-out-of-stock"));
+                    } else {
+                        java.util.Map<String, String> stPh = new java.util.HashMap<>();
+                        stPh.put("stock", String.format("%.0f", stock));
+                        lore.add(plugin.getMessageManager().getMessage("lore-stock", stPh));
+                        if (stock < 10) {
+                            lore.add(plugin.getMessageManager().getMessage("shop-lore-low-stock"));
+                        }
+                    }
+                }
             }
 
             lore.add("§7───────────────────");
-            lore.add("§eLeft-click to BUY");
+
+            // Instructions
+            if (ConfigCacheManager.useDialogGui) {
+                MessageManager.addLoreIfNotEmpty(lore, plugin.getMessageManager().getMessage("dialog-lore-click-to-open"));
+            } else {
+                lore.add("§eLeft-click to BUY");
+            }
 
             meta.lore(lore.stream().map(s -> MessageManager.parseComponent(s)).toList());
             item.setItemMeta(meta);
         }
 
         return item;
+    }
+
+    private static String prettifyMaterialName(String name) {
+        String[] parts = name.split("_");
+        StringBuilder out = new StringBuilder();
+        for (String s : parts) {
+            if (s.isEmpty()) continue;
+            out.append(s.substring(0, 1).toUpperCase());
+            out.append(s.substring(1).toLowerCase());
+            out.append(" ");
+        }
+        return out.toString().trim();
     }
 
     // build the item with lore
@@ -268,7 +352,14 @@ public class ShopGUI {
 
         ItemStack item;
         try {
-            item = new ItemStack(mat, 1);
+            // Use template if available (preserves enchantments, custom name, lore, etc.)
+            ItemStack template = ShopDataManager.getTemplate(mat);
+            if (template != null) {
+                item = template.clone();
+                item.setAmount(1);
+            } else {
+                item = new ItemStack(mat, 1);
+            }
         } catch (IllegalArgumentException e) {
             plugin.getLogger().warning("Invalid shop item material skipped: " + mat);
             // Return a placeholder item so the GUI doesn't break entirely
@@ -287,8 +378,11 @@ public class ShopGUI {
         }
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(
-                    MessageManager.parseComponent("§e§l" + mat.name().replace("_", " ")));
+            // Use template's custom name if it has one, otherwise use material name
+            if (!meta.hasDisplayName()) {
+                meta.displayName(
+                        MessageManager.parseComponent("§e§l" + mat.name().replace("_", " ")));
+            }
 
             List<String> lore = new ArrayList<>();
 
@@ -569,26 +663,34 @@ public class ShopGUI {
 
         int index = slotToItemIndex(clickedSlot);
 
+        // Index falls in regular items range
         if (index < 0 || index >= displayItems.size())
             return null;
         return displayItems.get(index);
     }
 
     /**
-     * Returns the SpecialShopItem that corresponds to the clicked slot (for special
-     * categories).
+     * Returns the SpecialShopItem that corresponds to the clicked slot.
+     * Works for both pure special categories (PERMISSIONS, SERVER_SHOP) and
+     * regular categories that contain special item variants (e.g., enchanted tools).
      */
     public SpecialShopItem getSpecialItemFromSlot(int clickedSlot) {
         if (isNavigationSlot(clickedSlot))
             return null;
-        if (category != ItemCategory.PERMISSIONS && category != ItemCategory.SERVER_SHOP)
-            return null;
 
         int index = slotToItemIndex(clickedSlot);
+        if (index < 0) return null;
 
-        if (index < 0 || index >= specialItems.size())
-            return null;
-        return specialItems.get(index);
+        if (category == ItemCategory.PERMISSIONS || category == ItemCategory.SERVER_SHOP) {
+            // Pure special category
+            if (index >= specialItems.size()) return null;
+            return specialItems.get(index);
+        } else {
+            // Mixed category: special items come after regular items
+            int specialIdx = index - displayItems.size();
+            if (specialIdx < 0 || specialIdx >= specialItems.size()) return null;
+            return specialItems.get(specialIdx);
+        }
     }
 
     public Inventory getInventory() {

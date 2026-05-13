@@ -7,7 +7,7 @@
 
     <groupId>org.minecraftsmp</groupId>
     <artifactId>DynamicShop</artifactId>
-    <version>2.5.8</version>
+    <version>2.5.9</version>
     <packaging>jar</packaging>
 
     <name>DynamicShop</name>
@@ -121,6 +121,12 @@
             <id>AlessioDP</id>
             <url>https://repo.alessiodp.com/releases/</url>
         </repository>
+
+        <!-- ValhallaMMO Repository -->
+        <repository>
+            <id>repsy-valhallammo</id>
+            <url>https://repo.repsy.io/mvn/athlaeos/valhallammo</url>
+        </repository>
         <repository>
             <id>triumph-snapshots</id>
             <url>https://repo.triumphteam.dev/snapshots</url>
@@ -231,6 +237,16 @@
             <artifactId>nexo</artifactId>
             <version>1.8.0</version>
             <scope>provided</scope>
+        </dependency>
+        
+        <!-- ValhallaMMO (optional soft-dependency for custom items)
+             Place your ValhallaMMO JAR file at: libs/ValhallaMMO.jar -->
+        <dependency>
+            <groupId>me.athlaeos</groupId>
+            <artifactId>valhallammo</artifactId>
+            <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/ValhallaMMO.jar</systemPath>
         </dependency>
     </dependencies>
 

@@ -207,6 +207,20 @@ public class DynamicShop extends JavaPlugin {
 
         setupPlaceholderAPI();
 
+        // Hook into ValhallaMMO if present
+        if (Bukkit.getPluginManager().getPlugin("ValhallaMMO") != null) {
+            getLogger().info("§aValhallaMMO found — custom item support enabled!");
+        }
+
+        // Warm up Nexo resolver AFTER all plugins have finished enabling.
+        // Nexo's GlyphTag/ShiftTag singletons may not be ready during onEnable.
+        if (Bukkit.getPluginManager().getPlugin("Nexo") != null) {
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                NexoWrapper.invalidateCache();  // Force re-init
+                getLogger().info("§aNexo glyph resolver cache warmed up.");
+            }, 1L);  // 1 tick after all plugins are done
+        }
+
         // --------------------------------------------------------------------
         // WEB SERVER
         // --------------------------------------------------------------------

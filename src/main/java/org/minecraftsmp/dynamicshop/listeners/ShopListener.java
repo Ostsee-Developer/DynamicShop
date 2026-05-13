@@ -280,9 +280,6 @@ public class ShopListener implements Listener {
         if (clicked == null || clicked.getType() == Material.AIR)
             return;
 
-        // When dialog GUI is enabled, disable direct right-click sell from inventory
-        if (ConfigCacheManager.useDialogGui && !org.minecraftsmp.dynamicshop.util.BedrockUtil.isBedrock(p))
-            return;
 
         // Only sell on RIGHT-click
         if (!isRightClick)
@@ -540,8 +537,16 @@ public class ShopListener implements Listener {
 
         plugin.getEconomyManager().charge(p, totalCost);
 
-        // Special handling: enchanted books get a random enchantment
-        if (mat == Material.ENCHANTED_BOOK) {
+        // Deliver item: use template if available, otherwise plain item
+        ItemStack template = ShopDataManager.getTemplate(mat);
+        if (template != null) {
+            // Template item — clone with all components preserved
+            for (int i = 0; i < amount; i++) {
+                ItemStack clone = template.clone();
+                clone.setAmount(1);
+                p.getInventory().addItem(clone);
+            }
+        } else if (mat == Material.ENCHANTED_BOOK) {
             for (int i = 0; i < amount; i++) {
                 p.getInventory().addItem(createRandomEnchantedBook());
             }
@@ -784,11 +789,9 @@ public class ShopListener implements Listener {
             }
 
             // instructions
-            if (!ConfigCacheManager.useDialogGui) {
-                lore.add("");
-                lore.add(plugin.getMessageManager().getMessage("lore-click-to-sell-1"));
-                lore.add(plugin.getMessageManager().getMessage("lore-shift-click-to-sell-64"));
-            }
+            lore.add("");
+            lore.add(plugin.getMessageManager().getMessage("lore-click-to-sell-1"));
+            lore.add(plugin.getMessageManager().getMessage("lore-shift-click-to-sell-64"));
 
             loreCache.put(mat, lore);
         }

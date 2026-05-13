@@ -12,7 +12,8 @@ public class SpecialShopItem {
     private final double price;
 
     // Category in the shop (must include PERMISSIONS and SERVER_SHOP in ItemCategory)
-    private final ItemCategory category;
+    // Mutable so server-shop items can be placed in any category (e.g., TOOLS)
+    private ItemCategory category;
 
     // For permission items
     private final String permission;
@@ -288,6 +289,10 @@ public class SpecialShopItem {
         this.nbt = nbt;
     }
 
+    public void setCategory(ItemCategory category) {
+        this.category = category;
+    }
+
     // ------------------------------------------------------------
     // GUI compatibility helpers
     // ------------------------------------------------------------
@@ -312,7 +317,7 @@ public class SpecialShopItem {
     }
 
     public boolean isServerShopItem() {
-        return category == ItemCategory.SERVER_SHOP;
+        return itemIdentifier != null && !itemIdentifier.isEmpty();
     }
 
 }

@@ -110,12 +110,19 @@ public class SearchResultsGUI {
     }
 
     private ItemStack buildResultItem(Material mat) {
-        ItemStack item = new ItemStack(mat);
+        // Use template if available (preserves enchantments, custom name, lore, etc.)
+        ItemStack template = ShopDataManager.getTemplate(mat);
+        ItemStack item = template != null ? template.clone() : new ItemStack(mat);
+        if (template != null) item.setAmount(1);
+
         ItemMeta meta = item.getItemMeta();
         if (meta == null)
             return item;
 
-        meta.displayName(MessageManager.parseComponent("§e§l" + mat.name().replace("_", " ")));
+        // Use template's custom name if it has one, otherwise use material name
+        if (!meta.hasDisplayName()) {
+            meta.displayName(MessageManager.parseComponent("§e§l" + mat.name().replace("_", " ")));
+        }
 
         double buy = ShopDataManager.getTotalBuyCost(mat, 1);
         double sell = ShopDataManager.getTotalSellValue(mat, 1);

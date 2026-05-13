@@ -39,7 +39,10 @@ public class ShopDialogManager {
      * @param gui    The ShopGUI to return to (can be ShopGUI or SearchResultsGUI)
      */
     public void openDialog(Player player, Material mat, Object gui) {
-        ItemStack displayItem = new ItemStack(mat);
+        // Use template if available so the dialog shows the item with components
+        org.bukkit.inventory.ItemStack template = ShopDataManager.getTemplate(mat);
+        ItemStack displayItem = template != null ? template.clone() : new ItemStack(mat);
+        if (template != null) displayItem.setAmount(1);
         String itemName = formatMaterialName(mat);
 
         double buyPrice1 = ShopDataManager.getTotalBuyCost(mat, 1);

@@ -411,7 +411,7 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
 
                 // ----------------------------------------------------------
                 // ADD NORMAL ITEM
-                // /shopadmin add item <price>
+                // /shopadmin add item <price> [category]
                 // ----------------------------------------------------------
                 if (type.equalsIgnoreCase("item")) {
 
@@ -433,6 +433,18 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                     Material mat = held.getType();
                     ItemCategory category = ShopDataManager.detectCategory(mat);
 
+                    // Optional category override: /shopadmin add item <price> <category>
+                    if (args.length >= 4) {
+                        try {
+                            category = ItemCategory.valueOf(args[3].toUpperCase());
+                        } catch (IllegalArgumentException e) {
+                            sender.sendMessage("§cUnknown category: §e" + args[3]);
+                            sender.sendMessage("§7Valid categories: §f" + java.util.Arrays.stream(ItemCategory.values())
+                                    .map(Enum::name).collect(java.util.stream.Collectors.joining(", ")));
+                            return true;
+                        }
+                    }
+
                     String iaId = null;
                     if (Bukkit.getPluginManager().getPlugin("ItemsAdder") != null) {
                         iaId = ItemsAdderWrapper.getCustomItemId(held);
@@ -441,17 +453,23 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                     if (Bukkit.getPluginManager().getPlugin("Nexo") != null) {
                         nexoId = NexoWrapper.getCustomItemId(held);
                     }
+                    String valhallaId = null;
+                    if (Bukkit.getPluginManager().getPlugin("ValhallaMMO") != null) {
+                        valhallaId = org.minecraftsmp.dynamicshop.managers.ValhallaMMOWrapper.getCustomItemId(held);
+                    }
 
-                    if (iaId != null || nexoId != null) {
-                        String id = (iaId != null ? iaId : nexoId).replace(":", "_");
-                        String customId = (iaId != null ? iaId : nexoId);
+                    if (iaId != null || nexoId != null || valhallaId != null) {
+                        String id = iaId != null ? iaId : (nexoId != null ? nexoId : valhallaId);
+                        id = id.replace(":", "_");
+                        String customId = iaId != null ? iaId : (nexoId != null ? nexoId : valhallaId);
 
                         // Delegate to addServerShop logic
                         plugin.getSpecialShopManager().addServerShopItem(id, customId, price, id, mat, null, true);
                         
                         // Update the config delivery method correctly
                         String basePath = "special_items." + id;
-                        plugin.getConfig().set(basePath + ".delivery_method", iaId != null ? "itemsadder" : "nexo");
+                        String deliveryMethod = iaId != null ? "itemsadder" : (nexoId != null ? "nexo" : "valhallammo");
+                        plugin.getConfig().set(basePath + ".delivery_method", deliveryMethod);
                         plugin.getConfig().set(basePath + ".nbt", customId);
                         plugin.saveConfig();
                         plugin.getSpecialShopManager().reload(); // Reload to apply delivery method
@@ -465,10 +483,47 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                                 "admin-server-shop-added", placeholders));
                         return true;
                     }
+                    // Check if the held item has custom components (enchantments, name, lore, etc.)
+                    ItemStack plainCheck = new ItemStack(mat);
+                    boolean hasCustomComponents = !held.isSimilar(plainCheck);
 
-                    // Write to config
+                    // If item has custom components AND the material already exists in the shop,
+                    // add it as a server-shop item (stored_item) instead of overwriting the regular entry.
+                    // This prevents an enchanted diamond sword from replacing a plain diamond sword.
+                    if (hasCustomComponents && ShopDataManager.itemConfigs.containsKey(mat)) {
+                        // Generate a unique ID based on material + timestamp
+                        String id = mat.name().toLowerCase() + "_custom_" + System.currentTimeMillis() % 100000;
+
+                        // Store as a special server-shop item with stored_item delivery
+                        plugin.getSpecialShopManager().addServerShopItem(id, id, price, id, mat, null, true);
+
+                        // Place it in the same category as the base material (e.g., TOOLS, COMBAT)
+                        String basePath = "special_items." + id;
+                        plugin.getConfig().set(basePath + ".delivery_method", "stored_item");
+                        plugin.getConfig().set(basePath + ".stored_item", held.clone());
+                        plugin.getConfig().set(basePath + ".category", category.name());
+                        plugin.saveConfig();
+                        plugin.getSpecialShopManager().reload();
+
+                        sender.sendMessage("§a✓ §7Added as custom variant in §e" + category.getDisplayName() + "§7.");
+                        sender.sendMessage("§7ID: §f" + id);
+                        sender.sendMessage("§7The regular §e" + mat.name().replace("_", " ") + " §7in the shop is unchanged.");
+                        return true;
+                    }
+
+                    // Write to config as a regular shop item
                     plugin.getConfig().set("items." + mat.name() + ".base", price);
                     plugin.saveConfig();
+
+                    // If item has custom components and material is NOT yet in the shop,
+                    // store it as a template so buyers receive the full item
+                    if (hasCustomComponents) {
+                        ShopDataManager.setTemplate(mat, held);
+                        sender.sendMessage("§a✓ §7Item has custom components — template stored! Buyers will receive the exact item.");
+                    } else {
+                        // Remove any old template if re-adding as plain
+                        ShopDataManager.removeTemplate(mat);
+                    }
 
                     ShopDataManager.reload();
 
@@ -656,6 +711,27 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
                             sender.sendMessage("§aAdded command item: §e" + id);
                             sender.sendMessage("§7Command: §f/" + command);
                             sender.sendMessage("§7Use {player} as placeholder for player name");
+
+                            // Reload to apply changes
+                            plugin.getSpecialShopManager().reload();
+                            return true;
+                        }
+
+                        // VALHALLAMMO MODE
+                        if (mode.equals("valhallammo")) {
+                            if (args.length < modeStartIndex + 2) {
+                                sender.sendMessage(
+                                        "§cUsage: /shopadmin add server-shop <price> <id> valhallammo <valhallammo_id>");
+                                return true;
+                            }
+                            String valhallaId = args[modeStartIndex + 1].toLowerCase();
+
+                            plugin.getConfig().set(basePath + ".delivery_method", "valhallammo");
+                            plugin.getConfig().set(basePath + ".nbt", valhallaId);
+                            plugin.saveConfig();
+
+                            sender.sendMessage("§aAdded ValhallaMMO item: §e" + id);
+                            sender.sendMessage("§7ValhallaMMO ID: §f" + valhallaId);
 
                             // Reload to apply changes
                             plugin.getSpecialShopManager().reload();
@@ -971,6 +1047,14 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 3 && args[1].equalsIgnoreCase("item")) {
             out.add("<price>");
+        } else if (args.length == 4 && args[1].equalsIgnoreCase("item")) {
+            // Suggest categories for /shopadmin add item <price> [category]
+            String partial = args[3].toUpperCase();
+            for (ItemCategory c : ItemCategory.values()) {
+                if (c != ItemCategory.PLAYER_SHOPS && c.name().startsWith(partial)) {
+                    out.add(c.name().toLowerCase());
+                }
+            }
         } else if (args.length == 3 && args[1].equalsIgnoreCase("perm")) {
             out.add("<price>");
         } else if (args.length == 4 && args[1].equalsIgnoreCase("perm")) {
@@ -983,6 +1067,25 @@ public class ShopAdminCommand implements CommandExecutor, TabCompleter {
             out.add("<price>");
         } else if (args.length == 4 && args[1].equalsIgnoreCase("server-shop")) {
             out.add("<id>");
+        } else if (args.length == 5 && args[1].equalsIgnoreCase("server-shop")) {
+            out.add("requiresperm");
+            out.add("spawner");
+            out.add("command");
+            out.add("component");
+            if (Bukkit.getPluginManager().getPlugin("ValhallaMMO") != null) out.add("valhallammo");
+        } else if (args.length == 6 && args[1].equalsIgnoreCase("server-shop") && args[4].equalsIgnoreCase("valhallammo")) {
+            if (Bukkit.getPluginManager().getPlugin("ValhallaMMO") != null) {
+                out.addAll(org.minecraftsmp.dynamicshop.managers.ValhallaMMOWrapper.getAllItemIds());
+            }
+        } else if (args.length == 7 && args[1].equalsIgnoreCase("server-shop") && args[4].equalsIgnoreCase("requiresperm")) {
+            out.add("spawner");
+            out.add("command");
+            out.add("component");
+            if (Bukkit.getPluginManager().getPlugin("ValhallaMMO") != null) out.add("valhallammo");
+        } else if (args.length == 8 && args[1].equalsIgnoreCase("server-shop") && args[6].equalsIgnoreCase("valhallammo")) {
+            if (Bukkit.getPluginManager().getPlugin("ValhallaMMO") != null) {
+                out.addAll(org.minecraftsmp.dynamicshop.managers.ValhallaMMOWrapper.getAllItemIds());
+            }
         }
 
         return out;

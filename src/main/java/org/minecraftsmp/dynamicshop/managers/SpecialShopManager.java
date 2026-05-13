@@ -263,6 +263,18 @@ public class SpecialShopManager {
                 case "server-shop" -> {
                     String identifier = plugin.getConfig().getString(basePath + "identifier");
                     addServerShopItem(id, name, price, identifier, displayMaterial, requiredPermission, false);
+                    // Override category if specified in config (allows placing server-shop items in regular categories)
+                    String categoryOverride = plugin.getConfig().getString(basePath + "category");
+                    if (categoryOverride != null && !categoryOverride.isEmpty()) {
+                        try {
+                            SpecialShopItem loaded = registry.get(id);
+                            if (loaded != null) {
+                                loaded.setCategory(ItemCategory.valueOf(categoryOverride.toUpperCase()));
+                            }
+                        } catch (IllegalArgumentException e) {
+                            plugin.getLogger().warning("[DynamicShop] Invalid category '" + categoryOverride + "' for special item " + id);
+                        }
+                    }
                 }
             }
         }
@@ -741,6 +753,42 @@ public class SpecialShopManager {
 
                 customStack.setAmount(Math.max(1, item.getAmount()));
                 player.getInventory().addItem(customStack);
+                return true;
+            }
+
+            // 7. VALHALLAMMO DELIVERY
+            if (deliveryMethod.equalsIgnoreCase("valhallammo")) {
+                if (plugin.getServer().getPluginManager().getPlugin("ValhallaMMO") == null) {
+                    plugin.getLogger().warning("[DynamicShop] Tried to give ValhallaMMO item " + item.getNbt()
+                            + " but plugin is not installed!");
+                    return false;
+                }
+
+                ItemStack valhallaItem = ValhallaMMOWrapper.getItem(item.getNbt());
+                if (valhallaItem == null) {
+                    plugin.getLogger()
+                            .warning("[DynamicShop] ValhallaMMO item " + item.getNbt() + " not found in registry.");
+                    return false;
+                }
+
+                valhallaItem.setAmount(Math.max(1, item.getAmount()));
+                player.getInventory().addItem(valhallaItem);
+                return true;
+            }
+
+            // 8. STORED ITEM DELIVERY (full ItemStack with all components)
+            if (deliveryMethod.equalsIgnoreCase("stored_item")) {
+                String configPath = "special_items." + item.getId() + ".stored_item";
+                ItemStack storedItem = plugin.getConfig().getItemStack(configPath);
+                if (storedItem == null) {
+                    plugin.getLogger().warning(
+                            "[DynamicShop] Special item " + item.getId() + " has no stored ItemStack.");
+                    return false;
+                }
+
+                ItemStack toGive = storedItem.clone();
+                toGive.setAmount(Math.max(1, item.getAmount()));
+                player.getInventory().addItem(toGive);
                 return true;
             }
 

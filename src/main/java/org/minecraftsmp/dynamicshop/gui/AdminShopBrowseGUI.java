@@ -71,12 +71,16 @@ public class AdminShopBrowseGUI {
             this.page = 0;
             this.maxPage = 0;
         } else {
-            this.specialItems = List.of();
+            // Regular category — also load any special items assigned here
             this.items = ShopDataManager.getItemsInCategoryIncludeDisabled(currentCategory);
             if (items == null)
                 items = List.of();
+            this.specialItems = plugin.getSpecialShopManager().getAllSpecialItems().values().stream()
+                    .filter(item -> item.getCategory() == currentCategory)
+                    .toList();
             this.page = 0;
-            this.maxPage = items.isEmpty() ? 0 : (items.size() - 1) / ITEMS_PER_PAGE;
+            int totalCombined = items.size() + specialItems.size();
+            this.maxPage = totalCombined <= 0 ? 0 : (totalCombined - 1) / ITEMS_PER_PAGE;
         }
     }
 
@@ -100,14 +104,21 @@ public class AdminShopBrowseGUI {
                 inventory.setItem(slot, buildSpecialItem(sItem));
             }
         } else {
-            // Render regular items for current page
+            // Render regular items + special items assigned to this category
+            int totalCombined = items.size() + specialItems.size();
             int start = page * ITEMS_PER_PAGE;
-            int end = Math.min(start + ITEMS_PER_PAGE, items.size());
+            int end = Math.min(start + ITEMS_PER_PAGE, totalCombined);
 
             for (int i = start; i < end; i++) {
-                Material mat = items.get(i);
                 int slot = i - start;
-                inventory.setItem(slot, buildAdminItem(mat));
+                if (i < items.size()) {
+                    Material mat = items.get(i);
+                    inventory.setItem(slot, buildAdminItem(mat));
+                } else {
+                    int specialIdx = i - items.size();
+                    SpecialShopItem sItem = specialItems.get(specialIdx);
+                    inventory.setItem(slot, buildSpecialItem(sItem));
+                }
             }
         }
 
@@ -121,6 +132,13 @@ public class AdminShopBrowseGUI {
             item = ItemsAdderWrapper.getItem(sItem.getNbt());
         } else if ("nexo".equalsIgnoreCase(sItem.getDeliveryMethod()) && sItem.getNbt() != null) {
             item = NexoWrapper.getItem(sItem.getNbt());
+        } else if ("valhallammo".equalsIgnoreCase(sItem.getDeliveryMethod()) && sItem.getNbt() != null) {
+            item = org.minecraftsmp.dynamicshop.managers.ValhallaMMOWrapper.getItem(sItem.getNbt());
+        } else if ("component".equalsIgnoreCase(sItem.getDeliveryMethod()) || "stored_item".equalsIgnoreCase(sItem.getDeliveryMethod())) {
+            String configPath = "special_items." + sItem.getId() + ".stored_item";
+            if (plugin.getConfig().contains(configPath)) {
+                item = plugin.getConfig().getItemStack(configPath);
+            }
         }
 
         if (item == null) {
@@ -168,7 +186,14 @@ public class AdminShopBrowseGUI {
 
         ItemStack item;
         try {
-            item = new ItemStack(mat, 1);
+            // Use template if available (shows enchant glow, etc.)
+            ItemStack template = ShopDataManager.getTemplate(mat);
+            if (template != null) {
+                item = template.clone();
+                item.setAmount(1);
+            } else {
+                item = new ItemStack(mat, 1);
+            }
         } catch (IllegalArgumentException e) {
             item = new ItemStack(Material.BARRIER);
             ItemMeta meta = item.getItemMeta();
@@ -196,6 +221,9 @@ public class AdminShopBrowseGUI {
             lore.add("§7Stock: §f" + String.format("%.0f", stock));
             lore.add("§7Category: §b" + category.getDisplayName());
             lore.add("§7Status: " + (disabled ? "§c✗ Disabled" : "§a✓ Enabled"));
+            if (ShopDataManager.hasTemplate(mat)) {
+                lore.add("§7Template: §d✓ Has components");
+            }
             lore.add("§7───────────────────");
             lore.add("");
             lore.add("§e§lRight-click to EDIT");
@@ -316,13 +344,9 @@ public class AdminShopBrowseGUI {
         if (!isRightClick)
             return;
 
-        // Check if we're in a special category
-        if (currentCategory == ItemCategory.PERMISSIONS || currentCategory == ItemCategory.SERVER_SHOP) {
-            SpecialShopItem sItem = getSpecialItemFromSlot(slot);
-            if (sItem == null)
-                return;
-
-            // Open the special item editor GUI
+        // Try special item first (works for both pure-special and mixed categories)
+        SpecialShopItem sItem = getSpecialItemFromSlot(slot);
+        if (sItem != null) {
             plugin.getShopListener().unregisterAdminBrowse(player);
             AdminSpecialItemEditGUI editGUI = new AdminSpecialItemEditGUI(plugin, player, sItem, this);
             plugin.getShopListener().registerAdminSpecialEdit(player, editGUI);
@@ -382,10 +406,18 @@ public class AdminShopBrowseGUI {
             return null;
 
         int index = (page * ITEMS_PER_PAGE) + slot;
-        if (index < 0 || index >= specialItems.size())
-            return null;
+        if (index < 0) return null;
 
-        return specialItems.get(index);
+        if (currentCategory == ItemCategory.PERMISSIONS || currentCategory == ItemCategory.SERVER_SHOP) {
+            // Pure special category
+            if (index >= specialItems.size()) return null;
+            return specialItems.get(index);
+        } else {
+            // Mixed category: special items come after regular items
+            int specialIdx = index - items.size();
+            if (specialIdx < 0 || specialIdx >= specialItems.size()) return null;
+            return specialItems.get(specialIdx);
+        }
     }
 
     public Material getItemFromSlot(int slot) {

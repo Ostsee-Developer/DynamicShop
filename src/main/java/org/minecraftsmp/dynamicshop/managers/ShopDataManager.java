@@ -7,6 +7,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.minecraftsmp.dynamicshop.DynamicShop;
 import org.minecraftsmp.dynamicshop.category.ItemCategory;
+import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
 import java.io.IOException;
@@ -46,6 +47,11 @@ public class ShopDataManager {
     // Admin features: category overrides
     private static final Map<Material, ItemCategory> categoryOverrides = new ConcurrentHashMap<>();
 
+    // Item templates (items with custom components like enchantments, names, lore)
+    private static final Map<Material, ItemStack> itemTemplates = new ConcurrentHashMap<>();
+    private static File templateFile;
+    private static YamlConfiguration templateConfig;
+
     // Save queue
     // which items need to be written to YAML
     private static final Set<Material> saveQueue = ConcurrentHashMap.newKeySet();
@@ -69,8 +75,10 @@ public class ShopDataManager {
         categoryCache.clear();
         categoryItems.clear();
         categoryOverrides.clear();
+        itemTemplates.clear();
 
         loadConfigItems();
+        loadTemplates();
         buildCategoryLists();
 
         shopDataFile = new File(plugin.getDataFolder(), "shopdata.yml");
@@ -169,6 +177,87 @@ public class ShopDataManager {
         }
 
         Bukkit.getLogger().info("[DynamicShop] Loaded " + loaded + " items from config.yml");
+    }
+
+    // ------------------------------------------------------------------------
+    // ITEM TEMPLATES (items with custom components)
+    // Stored in item_templates.yml using Bukkit's native ItemStack serialization
+    // ------------------------------------------------------------------------
+    private static void loadTemplates() {
+        templateFile = new File(plugin.getDataFolder(), "item_templates.yml");
+        if (!templateFile.exists()) {
+            templateConfig = new YamlConfiguration();
+            return;
+        }
+        templateConfig = YamlConfiguration.loadConfiguration(templateFile);
+
+        int count = 0;
+        for (String key : templateConfig.getKeys(false)) {
+            Material mat = Material.matchMaterial(key);
+            if (mat == null) continue;
+            ItemStack template = templateConfig.getItemStack(key);
+            if (template != null) {
+                itemTemplates.put(mat, template);
+                count++;
+            }
+        }
+
+        if (count > 0) {
+            Bukkit.getLogger().info("[DynamicShop] Loaded " + count + " item templates with components");
+        }
+    }
+
+    /**
+     * Store a template ItemStack for a material. When players buy this material,
+     * they receive a clone of the template instead of a plain item.
+     * The template preserves all item components (enchantments, names, lore, etc).
+     */
+    public static void setTemplate(Material mat, ItemStack template) {
+        ItemStack clean = template.clone();
+        clean.setAmount(1);
+        itemTemplates.put(mat, clean);
+
+        if (templateConfig == null) {
+            templateConfig = new YamlConfiguration();
+        }
+        templateConfig.set(mat.name(), clean);
+        saveTemplates();
+    }
+
+    /**
+     * Get the template ItemStack for a material, or null if no template is set.
+     * Always returns a fresh clone to prevent mutation.
+     */
+    public static ItemStack getTemplate(Material mat) {
+        ItemStack template = itemTemplates.get(mat);
+        return template != null ? template.clone() : null;
+    }
+
+    /**
+     * Check if a material has a stored template with custom components.
+     */
+    public static boolean hasTemplate(Material mat) {
+        return itemTemplates.containsKey(mat);
+    }
+
+    /**
+     * Remove a stored template for a material.
+     */
+    public static void removeTemplate(Material mat) {
+        itemTemplates.remove(mat);
+        if (templateConfig != null) {
+            templateConfig.set(mat.name(), null);
+            saveTemplates();
+        }
+    }
+
+    private static void saveTemplates() {
+        if (templateConfig == null || templateFile == null) return;
+        try {
+            templateConfig.save(templateFile);
+        } catch (IOException e) {
+            plugin.getLogger().severe("[DynamicShop] Failed to save item_templates.yml: " + e.getMessage());
+        }
     }
 
     // ------------------------------------------------------------------------

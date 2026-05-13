@@ -80,21 +80,37 @@ public class MessageManager {
                     new InputStreamReader(defaultStream));
             messagesConfig.setDefaults(defaultConfig);
 
-            // Auto-add any missing keys to the user's file
-            boolean changed = false;
+            // Collect missing keys and their default values
+            java.util.List<String[]> missing = new java.util.ArrayList<>();
             for (String key : defaultConfig.getKeys(true)) {
                 if (!messagesConfig.isSet(key)) {
-                    messagesConfig.set(key, defaultConfig.get(key));
-                    changed = true;
-                    plugin.getLogger().info("[Messages] Added missing key: " + key);
+                    Object val = defaultConfig.get(key);
+                    if (val instanceof String) {
+                        messagesConfig.set(key, val); // Add to in-memory config
+                        missing.add(new String[]{key, (String) val});
+                        plugin.getLogger().info("[Messages] Added missing key: " + key);
+                    }
                 }
             }
-            if (changed) {
-                try {
-                    messagesConfig.save(messagesFile);
-                    plugin.getLogger().info("[Messages] Saved updated messages.yml with new keys.");
+
+            // Append missing keys to the file WITHOUT re-serializing the whole thing.
+            // This prevents Bukkit's SnakeYAML from corrupting MiniMessage tags like
+            // <glyph:...> and <shift:...> which get mangled when the file is re-saved.
+            if (!missing.isEmpty()) {
+                try (java.io.FileWriter fw = new java.io.FileWriter(messagesFile, true)) {
+                    fw.write("\n  # --- Auto-added missing keys ---\n");
+                    for (String[] entry : missing) {
+                        // entry[0] = "messages.key-name", entry[1] = "value"
+                        String shortKey = entry[0].startsWith("messages.") 
+                            ? entry[0].substring("messages.".length()) 
+                            : entry[0];
+                        // Escape the value for YAML (wrap in double quotes)
+                        String escaped = entry[1].replace("\\", "\\\\").replace("\"", "\\\"");
+                        fw.write("  " + shortKey + ": \"" + escaped + "\"\n");
+                    }
+                    plugin.getLogger().info("[Messages] Appended " + missing.size() + " missing keys to messages.yml (safe append, no reformatting).");
                 } catch (java.io.IOException e) {
-                    plugin.getLogger().warning("[Messages] Could not save updated messages.yml: " + e.getMessage());
+                    plugin.getLogger().warning("[Messages] Could not append missing keys to messages.yml: " + e.getMessage());
                 }
             }
         }
@@ -168,8 +184,10 @@ public class MessageManager {
                 }
                 if (result != null) return result;
             } catch (Throwable ignored) {}
-            // Fallback to vanilla MiniMessage
-            return net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(mmText);
+            // Fallback: strip Nexo-specific tags so vanilla MiniMessage doesn't render garbage
+            String stripped = mmText.replaceAll("<glyph:[^>]*>", "").replaceAll("<shift:[^>]*>", "");
+            org.bukkit.Bukkit.getLogger().warning("[DynamicShop] Nexo glyph tags could not be resolved — rendering without glyphs. Text: " + text);
+            return net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(stripped);
         }
         
         // For simple strings without Nexo tags, use legacy serializer
